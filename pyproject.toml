@@ -7,11 +7,21 @@ authors = [
     { name = "Arthur", email = "baginian.artur@yandex.com" }
 ]
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "pyqt6>=6.11.0",
+]
 
 [project.scripts]
-conf-uprav-1 = "conf_uprav_1:main"
+repl = "repl:main"
 
 [build-system]
 requires = ["uv_build>=0.12.19,<0.13.0"]
 build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "repl"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
