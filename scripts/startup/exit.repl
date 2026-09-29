@@ -1,0 +1,5 @@
+# exit.repl -- a few commands, then exit with a specific code.
+
+ls -l $HOME
+cd /tmp
+exit 3

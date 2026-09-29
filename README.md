@@ -30,15 +30,91 @@ uv run repl
 uv run python -m repl
 ```
 
+## Параметры запуска
+
+```
+uv run repl [--vfs PATH] [--script PATH]
+```
+
+- `--vfs PATH` — путь к образу VFS. На этом этапе путь только принимается и
+  отображается в отладочном выводе; сама VFS не загружается (этап 3).
+- `--script PATH` — путь к стартовому скрипту эмулятора (см. ниже), который
+  выполняется сразу после открытия окна.
+
+Оба параметра разбираются `argparse` **до** создания `QApplication`: неизвестный
+флаг, `--script` без значения и т.п. печатают `usage: ...` в stderr и завершают
+процесс с кодом `2`, не открывая окно; `--help` печатает справку и код `0`.
+
+При каждом запуске в начале ленты вывода (и в stdout процесса) печатаются
+отладочные строки со всеми параметрами:
+
+```
+[config] vfs    = <not set>
+[config] script = /home/arthur/Projects/conf-uprav-1/scripts/startup/basic.repl (exists)
+```
+
+Для незаданного параметра выводится `<not set>`; для заданного — абсолютный
+путь и пометка `(exists)` / `(not found)` в зависимости от того, существует ли
+файл.
+
+## Стартовый скрипт
+
+Стартовый скрипт (`--script PATH`) — обычный текстовый файл в кодировке UTF-8,
+где каждая непустая строка выполняется построчно тем же интерпретатором
+команд, что и интерактивный ввод. Поддерживаются комментарии: `#` вне кавычек
+в начале слова начинает комментарий до конца строки — как отдельной строкой
+(`# comment`), так и после команды (`ls -l # comment`); `#` внутри слова
+(`a#b`) или в кавычках (`'#'`, `"#"`) остаётся обычным символом, `\#` — его
+литеральное экранирование. Пустые и чисто комментарные строки не выполняются и
+не выводятся в ленту.
+
+Каждая исполняемая строка сначала «эхоится» в ленту (`приглашение + строка`),
+затем показывается её результат — точно так же, как при ручном вводе. Если
+команда завершается с ненулевым кодом возврата, выполнение скрипта
+прерывается, печатается сообщение
+
+```
+repl: <script>: line <N>: aborted (exit code <code>)
+```
+
+красным цветом, и эмулятор возвращается в обычный интерактивный режим —
+последующие строки скрипта не выполняются. Если скрипт сам вызывает `exit`,
+окно закрывается с указанным кодом возврата, как и при интерактивном вводе
+`exit`. Ошибки чтения файла (нет такого файла, каталог вместо файла, нет прав,
+содержимое не в UTF-8) также выводятся красным, после чего эмулятор работает
+в обычном интерактивном режиме.
+
+## Скрипты ОС
+
+`scripts/*.sh` — исполняемые bash-скрипты, вызывающие эмулятор
+(`uv run repl ...`) со всеми комбинациями параметров командной строки, включая
+ошибочные:
+
+- `run_default.sh` — без параметров;
+- `run_vfs.sh` — только `--vfs` (существующий и несуществующий путь);
+- `run_script.sh` — только `--script`;
+- `run_all_params.sh` — `--vfs` и `--script` вместе;
+- `run_script_errors.sh` — стартовый скрипт с ошибкой команды/аргументов и
+  несуществующий скрипт;
+- `run_bad_args.sh` — ошибки аргументов командной строки (неизвестный флаг,
+  `--script` без значения, `--help`).
+
+Соответствующие стартовые скрипты эмулятора лежат в `scripts/startup/*.repl`.
+Под офскрин-платформой Qt (`QT_QPA_PLATFORM=offscreen`) запуски, которые не
+заканчиваются командой `exit`, не завершаются сами — окно остаётся открытым в
+интерактивном режиме, поэтому такой вызов нужно прерывать вручную (например,
+`timeout`).
+
 ## Тесты
 
 ```bash
 uv run pytest -q
 ```
 
-Тесты ядра (`test_parser.py`, `test_commands.py`, `test_shell.py`) запускаются
-без дисплея. GUI smoke-тест (`test_gui_smoke.py`) требует PyQt6 и офскрин-платформу
-Qt (пропускается автоматически, если PyQt6 не установлен):
+Тесты ядра (`test_parser.py`, `test_commands.py`, `test_shell.py`,
+`test_config.py`, `test_script.py`) запускаются без дисплея. GUI smoke-тест
+(`test_gui_smoke.py`) требует PyQt6 и офскрин-платформу Qt (пропускается
+автоматически, если PyQt6 не установлен):
 
 ```bash
 QT_QPA_PLATFORM=offscreen uv run pytest -q
@@ -48,22 +124,38 @@ QT_QPA_PLATFORM=offscreen uv run pytest -q
 
 ```
 src/repl/
-├── __init__.py       # main() → app.run()
-├── __main__.py        # python -m repl
-├── app.py              # QApplication, MainWindow, exec()
+├── __init__.py         # main(): parse_args() → sys.exit(app.run(cfg))
+├── __main__.py         # python -m repl
+├── app.py              # печать debug-строк, QApplication, MainWindow, exec()
 ├── core/                # чистый Python, без Qt
 │   ├── errors.py
 │   ├── sysinfo.py
-│   ├── parser.py
+│   ├── parser.py        # + комментарии `#`
 │   ├── commands.py
-│   └── shell.py
+│   ├── shell.py
+│   ├── config.py        # AppConfig, parse_args, format_config
+│   └── script.py        # load_script, iter_script, abort_message
 └── ui/
-    ├── main_window.py
-    └── terminal.py
+    ├── main_window.py   # config, debug-вывод, запуск стартового скрипта
+    └── terminal.py       # echo_command()
+scripts/
+├── run_default.sh
+├── run_vfs.sh
+├── run_script.sh
+├── run_all_params.sh
+├── run_script_errors.sh
+├── run_bad_args.sh
+└── startup/
+    ├── basic.repl
+    ├── with_error.repl
+    ├── bad_args.repl
+    └── exit.repl
 tests/
 ├── test_parser.py
 ├── test_commands.py
 ├── test_shell.py
+├── test_config.py
+├── test_script.py
 └── test_gui_smoke.py
 ```
 

@@ -1,0 +1,5 @@
+# basic.repl -- comments (whole-line and trailing) plus $HOME and quoting.
+ls -l $HOME
+cd "${HOME}/projects"   # trailing comment after a real command
+cd '$HOME'
+ls -la

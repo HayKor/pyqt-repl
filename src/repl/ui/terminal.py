@@ -98,9 +98,17 @@ class TerminalWidget(QWidget):
         self._input.setText(line)
         self._on_return_pressed()
 
+    def echo_command(self, line: str) -> None:
+        """Print ``prompt + line`` to the output ribbon, without executing it.
+
+        Used both for interactively entered lines and for each line of a
+        startup script, so the two modes look identical.
+        """
+        self._append_plain(f"{self._prompt}{line}")
+
     def _on_return_pressed(self) -> None:
         line = self._input.text()
-        self._append_plain(f"{self._prompt}{line}")
+        self.echo_command(line)
         self._input.add_to_history(line)
         self._input.clear()
         self.command_entered.emit(line)
