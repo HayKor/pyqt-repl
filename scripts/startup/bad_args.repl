@@ -1,0 +1,5 @@
+# bad_args.repl -- a command-argument error aborts the script.
+
+ls -l $HOME
+ls -z
+ls -l /never/reached

@@ -1,0 +1,6 @@
+# with_error.repl -- a script that aborts partway through.
+
+ls -l $HOME
+cd /tmp   # inline comment
+foo bar
+ls -l /never/reached

@@ -25,3 +25,11 @@ class CommandNotFoundError(ShellError):
 
 class CommandArgsError(ShellError):
     """Raised by a command implementation when arguments are invalid."""
+
+
+class ScriptError(ShellError):
+    """Raised when a startup script cannot be loaded or read.
+
+    Covers a missing file, a directory given instead of a file, a
+    permission error, and content that is not valid UTF-8.
+    """

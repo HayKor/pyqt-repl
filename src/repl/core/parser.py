@@ -19,6 +19,11 @@ Supported subset:
                       it as the ``"?"`` key of the env mapping);
     - ``~``          at the very start of an unquoted word expands to
                       ``$HOME``;
+    - ``#``          outside quotes, at the very start of a word, starts a
+                      comment that runs to the end of the line (``ls -l #
+                      comment``, ``# whole line``); ``#`` inside a word
+                      (``a#b``) or inside quotes (``'#'``, ``"#"``) is a
+                      literal character, and ``\\#`` escapes it;
     - an unterminated quote, or ``${`` without a matching ``}``, raises
       ``ParseError``;
     - a word built entirely from unquoted text that expands to the empty
@@ -82,6 +87,10 @@ def tokenize(line: str, env: Mapping[str, str] | None = None) -> list[str]:
         while i < n and line[i].isspace():
             i += 1
         if i >= n:
+            break
+
+        if line[i] == "#":
+            # Unquoted '#' at the start of a word: comment to end of line.
             break
 
         parts: list[str] = []

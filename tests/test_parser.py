@@ -105,3 +105,27 @@ def test_unterminated_double_quote_raises() -> None:
 def test_unterminated_brace_raises() -> None:
     with pytest.raises(ParseError):
         tokenize("echo ${HOME", ENV)
+
+
+def test_hash_comment_whole_line_is_dropped() -> None:
+    assert tokenize("# only", ENV) == []
+
+
+def test_hash_comment_after_command() -> None:
+    assert tokenize("ls -l # comment", ENV) == ["ls", "-l"]
+
+
+def test_hash_mid_word_is_literal() -> None:
+    assert tokenize("echo a#b", ENV) == ["echo", "a#b"]
+
+
+def test_hash_in_single_quotes_is_literal() -> None:
+    assert tokenize("echo '#'", ENV) == ["echo", "#"]
+
+
+def test_hash_in_double_quotes_is_literal() -> None:
+    assert tokenize('echo "#"', ENV) == ["echo", "#"]
+
+
+def test_escaped_hash_is_literal() -> None:
+    assert tokenize(r"echo \#", ENV) == ["echo", "#"]
