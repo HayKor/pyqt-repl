@@ -10,9 +10,15 @@
 
 - `core/parser.py` — токенизатор командной строки (кавычки, `\`, `$VAR`,
   `${VAR}`, `~`, `$?`);
-- `core/commands.py` — команды-заглушки `ls`, `cd`, `exit` и их реестр;
-- `core/shell.py` — `Shell.execute(line)`, связывает парсер и команды,
+- `core/commands.py` — команды `ls`/`cd` (по-прежнему заглушки; реальная
+  логика — следующий этап), `exit`, `vfs-info` и их реестр; `Command.run`
+  принимает `CommandContext` (VFS, `cwd`, `$?`, окружение);
+- `core/shell.py` — `Shell.execute(line)`, связывает парсер, команды и VFS,
   превращает исключения в текст ошибки и код возврата (как в bash);
+- `core/vfs.py` — модель VFS в памяти (`VDir`/`VFile`/`VFS`) и разрешение
+  путей (`normalize`/`resolve`);
+- `core/vfs_loader.py` — загрузка VFS из XML (`load_vfs`), `describe(vfs)`
+  для строки `[vfs] loaded ...`;
 - `core/sysinfo.py` — имя пользователя/хоста для заголовка окна и приглашения.
 
 GUI (`src/repl/ui/`) — это тонкий слой поверх ядра: `TerminalWidget` показывает
@@ -36,10 +42,11 @@ uv run python -m repl
 uv run repl [--vfs PATH] [--script PATH]
 ```
 
-- `--vfs PATH` — путь к образу VFS. На этом этапе путь только принимается и
-  отображается в отладочном выводе; сама VFS не загружается (этап 3).
+- `--vfs PATH` — путь к образу VFS (XML, см. «Виртуальная файловая
+  система» ниже). Загружается в память сразу после открытия окна, до
+  запуска стартового скрипта.
 - `--script PATH` — путь к стартовому скрипту эмулятора (см. ниже), который
-  выполняется сразу после открытия окна.
+  выполняется сразу после открытия окна (и после загрузки VFS).
 
 Оба параметра разбираются `argparse` **до** создания `QApplication`: неизвестный
 флаг, `--script` без значения и т.п. печатают `usage: ...` в stderr и завершают
@@ -84,6 +91,58 @@ repl: <script>: line <N>: aborted (exit code <code>)
 содержимое не в UTF-8) также выводятся красным, после чего эмулятор работает
 в обычном интерактивном режиме.
 
+## Виртуальная файловая система
+
+VFS полностью живёт в памяти: `--vfs PATH` указывает на XML-файл, который
+читается один раз как байты (для SHA-256) и разбирается в дерево каталогов
+(`VDir`) и файлов (`VFile`); ни сам образ, ни что-либо производное от него
+никогда не записывается на диск. Формат:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<vfs name="demo" mode="755" owner="root" group="root">
+  <dir name="home">
+    <dir name="user" owner="user" group="user">
+      <file name="notes.txt" mode="644">hello
+world
+</file>
+      <file name=".profile">export X=1</file>
+      <file name="logo.bin" encoding="base64">iVBORw0KGgo=</file>
+    </dir>
+  </dir>
+  <dir name="tmp" mode="777"/>
+</vfs>
+```
+
+Правила (любое нарушение → ошибка загрузки с пометкой `invalid format`):
+корневой элемент — `<vfs>` (сам каталог `/`); дочерние элементы — только
+`<dir>`/`<file>`; `name` обязателен у `<dir>`/`<file>` (непустой, без `/`, не
+`.`/`..`, уникален в своём каталоге); `mode` — три восьмеричные цифры
+(допускается ведущий `0`), по умолчанию `755` для каталогов и `644` для
+файлов; `owner`/`group` по умолчанию `root`; `encoding` у `<file>` — `text`
+(по умолчанию, UTF-8 как есть) или `base64` (пробельные символы перед
+декодированием удаляются).
+
+При запуске с `--vfs` VFS загружается сразу после отладочных `[config]`-строк
+и до стартового скрипта:
+
+```
+[vfs] loaded 'demo' (3 dirs, 3 files)
+```
+
+Если загрузка не удалась (нет файла, это каталог, невалидный XML или формат
+не соответствует схеме), сообщение об ошибке печатается красным, а эмулятор
+продолжает работать с пустой VFS (`vfs-info` в этом случае сообщает, что VFS
+не загружена). Без `--vfs` ничего из этого не печатается.
+
+Команда `vfs-info` (без аргументов) печатает имя VFS и SHA-256 её XML-файла:
+
+```
+arthur@host:~$ vfs-info
+name: demo
+sha256: 3f5a...e1
+```
+
 ## Скрипты ОС
 
 `scripts/*.sh` — исполняемые bash-скрипты, вызывающие эмулятор
@@ -97,7 +156,16 @@ repl: <script>: line <N>: aborted (exit code <code>)
 - `run_script_errors.sh` — стартовый скрипт с ошибкой команды/аргументов и
   несуществующий скрипт;
 - `run_bad_args.sh` — ошибки аргументов командной строки (неизвестный флаг,
-  `--script` без значения, `--help`).
+  `--script` без значения, `--help`);
+- `vfs_minimal.sh` — VFS из одного корня (`vfs/minimal.xml`);
+- `vfs_multi.sh` — несколько файлов в корне, включая скрытый и base64
+  (`vfs/multi.xml`);
+- `vfs_deep.sh` — VFS из ≥3 уровней (`vfs/deep.xml`), стартовый скрипт
+  прогоняет все команды этапов 1-3;
+- `vfs_errors.sh` — ошибки загрузки VFS: отсутствующий файл, каталог вместо
+  файла и каждый образ из `vfs/broken/`;
+- `stage3_errors.sh` — стартовые скрипты с одной ошибкой в конце
+  (неизвестная команда, неверная опция `ls`) и `vfs-info` без `--vfs`.
 
 Соответствующие стартовые скрипты эмулятора лежат в `scripts/startup/*.repl`.
 Под офскрин-платформой Qt (`QT_QPA_PLATFORM=offscreen`) запуски, которые не
@@ -112,9 +180,10 @@ uv run pytest -q
 ```
 
 Тесты ядра (`test_parser.py`, `test_commands.py`, `test_shell.py`,
-`test_config.py`, `test_script.py`) запускаются без дисплея. GUI smoke-тест
-(`test_gui_smoke.py`) требует PyQt6 и офскрин-платформу Qt (пропускается
-автоматически, если PyQt6 не установлен):
+`test_config.py`, `test_script.py`, `test_vfs.py`, `test_vfs_loader.py`)
+запускаются без дисплея. GUI smoke-тест (`test_gui_smoke.py`) требует PyQt6
+и офскрин-платформу Qt (пропускается автоматически, если PyQt6 не
+установлен):
 
 ```bash
 QT_QPA_PLATFORM=offscreen uv run pytest -q
@@ -131,12 +200,14 @@ src/repl/
 │   ├── errors.py
 │   ├── sysinfo.py
 │   ├── parser.py        # + комментарии `#`
-│   ├── commands.py
-│   ├── shell.py
+│   ├── commands.py      # Command.run(args, ctx); ls/cd (заглушки), exit, vfs-info
+│   ├── shell.py         # Shell(vfs=...), CommandContext, cwd
 │   ├── config.py        # AppConfig, parse_args, format_config
-│   └── script.py        # load_script, iter_script, abort_message
+│   ├── script.py        # load_script, iter_script, abort_message
+│   ├── vfs.py           # VNode/VDir/VFile/VFS, normalize/resolve
+│   └── vfs_loader.py    # load_vfs, describe
 └── ui/
-    ├── main_window.py   # config, debug-вывод, запуск стартового скрипта
+    ├── main_window.py   # config, debug-вывод, загрузка VFS, запуск стартового скрипта
     └── terminal.py       # echo_command()
 scripts/
 ├── run_default.sh
@@ -145,17 +216,38 @@ scripts/
 ├── run_all_params.sh
 ├── run_script_errors.sh
 ├── run_bad_args.sh
+├── vfs_minimal.sh
+├── vfs_multi.sh
+├── vfs_deep.sh
+├── vfs_errors.sh
+├── stage3_errors.sh
 └── startup/
     ├── basic.repl
     ├── with_error.repl
     ├── bad_args.repl
-    └── exit.repl
+    ├── exit.repl
+    ├── vfs_info.repl
+    ├── stage3.repl
+    ├── stage3_err_unknown.repl
+    └── stage3_err_ls.repl
+vfs/
+├── minimal.xml
+├── multi.xml
+├── deep.xml
+└── broken/
+    ├── not_xml.xml
+    ├── wrong_root.xml
+    ├── bad_base64.xml
+    ├── duplicate.xml
+    └── bad_mode.xml
 tests/
 ├── test_parser.py
 ├── test_commands.py
 ├── test_shell.py
 ├── test_config.py
 ├── test_script.py
+├── test_vfs.py
+├── test_vfs_loader.py
 └── test_gui_smoke.py
 ```
 

@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<vfs name="bad_mode">
+  <dir name="weird" mode="999"/>
+</vfs>
