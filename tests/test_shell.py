@@ -1,4 +1,5 @@
 from repl.core.shell import Shell
+from repl.core.vfs import VFS
 
 
 def make_shell() -> Shell:
@@ -90,3 +91,35 @@ def test_status_variable_expansion() -> None:
     shell.execute("ls -z")  # last_exit_code becomes 2
     result = shell.execute('ls "code=$?"')
     assert result.stdout == "ls: args=['code=2']"
+
+
+def test_default_vfs_is_empty() -> None:
+    shell = make_shell()
+    assert shell.vfs.loaded is False
+    assert shell.cwd == "/"
+
+
+def test_vfs_info_no_vfs_loaded() -> None:
+    shell = make_shell()
+    result = shell.execute("vfs-info")
+    assert result.stderr == "vfs-info: no VFS loaded"
+    assert result.exit_code == 1
+    assert shell.last_exit_code == 1
+
+
+def test_vfs_info_with_loaded_vfs() -> None:
+    from pathlib import Path
+
+    vfs = VFS(name="demo", sha256="abc123", root=VFS.empty().root, source=Path("fs.xml"))
+    shell = Shell(env={"HOME": "/home/arthur"}, vfs=vfs)
+    result = shell.execute("vfs-info")
+    assert result.stdout == "name: demo\nsha256: abc123"
+    assert result.stderr == ""
+    assert result.exit_code == 0
+
+
+def test_vfs_info_too_many_arguments() -> None:
+    shell = make_shell()
+    result = shell.execute("vfs-info extra")
+    assert result.stderr == "vfs-info: too many arguments"
+    assert result.exit_code == 2

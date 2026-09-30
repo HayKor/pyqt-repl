@@ -131,3 +131,51 @@ def test_startup_script_exit_closes_the_window(qapp: QApplication, tmp_path: Pat
 
     assert window.isVisible() is False
     assert window.shell.last_exit_code == 3
+
+
+_VFS_DIR = Path(__file__).resolve().parent.parent / "vfs"
+
+
+def test_valid_vfs_loads_and_prints_summary(qapp: QApplication) -> None:
+    window = MainWindow(config=AppConfig(vfs_path=_VFS_DIR / "deep.xml"))
+    text = window.terminal.output_text()
+    assert "[vfs] loaded 'deep' (11 dirs, 6 files)" in text
+    assert window.shell.vfs.loaded is True
+    assert window.shell.vfs.name == "deep"
+
+
+def test_broken_vfs_reports_error_and_keeps_empty_vfs(qapp: QApplication) -> None:
+    window = MainWindow(config=AppConfig(vfs_path=_VFS_DIR / "broken" / "wrong_root.xml"))
+    text = window.terminal.output_text()
+    assert "invalid format: root element must be <vfs>" in text
+    assert window.shell.vfs.loaded is False
+
+
+def test_missing_vfs_reports_error(qapp: QApplication, tmp_path: Path) -> None:
+    missing = tmp_path / "missing.xml"
+    window = MainWindow(config=AppConfig(vfs_path=missing))
+    text = window.terminal.output_text()
+    assert f"repl: vfs: {missing}: No such file or directory" in text
+    assert window.shell.vfs.loaded is False
+
+
+def test_no_vfs_path_prints_nothing_vfs_related(qapp: QApplication) -> None:
+    window = MainWindow()
+    text = window.terminal.output_text()
+    assert "[vfs]" not in text
+    assert window.shell.vfs.loaded is False
+
+
+def test_vfs_info_command_in_window(qapp: QApplication) -> None:
+    window = MainWindow(config=AppConfig(vfs_path=_VFS_DIR / "minimal.xml"))
+    window.terminal.submit("vfs-info")
+    text = window.terminal.output_text()
+    assert "name: minimal" in text
+    assert "sha256:" in text
+
+
+def test_vfs_info_command_without_vfs_reports_error(qapp: QApplication) -> None:
+    window = MainWindow()
+    window.terminal.submit("vfs-info")
+    text = window.terminal.output_text()
+    assert "vfs-info: no VFS loaded" in text

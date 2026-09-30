@@ -33,3 +33,21 @@ class ScriptError(ShellError):
     Covers a missing file, a directory given instead of a file, a
     permission error, and content that is not valid UTF-8.
     """
+
+
+class VFSLoadError(ShellError):
+    """Raised when a VFS image cannot be loaded.
+
+    Covers a missing file, a directory given instead of a file, a
+    permission error, malformed XML, and XML that does not follow the VFS
+    schema (unknown elements/attributes, bad mode, duplicate names, ...).
+    """
+
+
+class VFSPathError(ShellError):
+    """Raised by ``VFS.resolve`` when a path cannot be found inside a VFS."""
+
+    def __init__(self, path: str, reason: str) -> None:
+        self.path = path
+        self.reason = reason
+        super().__init__(f"{path}: {reason}")
