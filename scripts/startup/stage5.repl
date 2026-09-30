@@ -1,0 +1,48 @@
+# stage5.repl -- every chmod/chown mode against vfs/deep.xml, in their
+# successful forms, then one error at the end (same convention as
+# stage3.repl/stage4.repl: the emulator aborts on the first failing
+# command, so error demos live in separate stage5_err_*.repl scripts).
+# Run with --vfs vfs/deep.xml (see scripts/stage5.sh).
+
+vfs-info
+ls -l /home/user/docs
+
+# Octal mode: replaces the bits wholesale.
+chmod 755 /home/user/docs/notes.txt
+ls -l /home/user/docs/notes.txt
+
+# Symbolic mode, comma-separated list of clauses.
+chmod u-x,go-x /home/user/docs/notes.txt
+ls -l /home/user/docs/notes.txt
+
+# Symbolic mode with '=': assigns a role's bits outright; an empty list
+# ('o=') clears that role.
+chmod u=rwx,g=rx,o= /home/user/docs/notes.txt
+ls -l /home/user/docs/notes.txt
+
+# '-x' on its own is the MODE (GNU-style), not an unknown option.
+chmod -x /home/user/docs/notes.txt
+ls -l /home/user/docs/notes.txt
+
+# '-R': recursive, covers the directory itself and every descendant.
+chmod -R 640 /home/user/docs
+ls -l /home/user/docs
+
+# chown forms: OWNER, OWNER:GROUP, OWNER: (group left alone), :GROUP
+# (owner left alone), and numeric uid/gid.
+chown alice /home/user/docs/notes.txt
+ls -l /home/user/docs/notes.txt
+chown alice:staff /home/user/docs/empty.txt
+ls -l /home/user/docs/empty.txt
+chown bob: /home/user/docs/empty.txt
+ls -l /home/user/docs/empty.txt
+chown :wheel /home/user/docs/empty.txt
+ls -l /home/user/docs/empty.txt
+chown -R 1000:1000 /home/user/docs
+ls -l /home/user/docs
+
+# The XML source never changes: the name and hash are exactly what they
+# were at the top of this script.
+vfs-info
+
+vfs-info extra

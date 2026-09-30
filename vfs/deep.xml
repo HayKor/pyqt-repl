@@ -2,7 +2,7 @@
 <vfs name="deep" mode="755" owner="root" group="root">
   <dir name="home">
     <dir name="user" owner="user" group="user">
-      <dir name="docs">
+      <dir name="docs" owner="user" group="user">
         <file name="notes.txt" mode="644" owner="user" group="user">First line of notes.
 Second line of notes.
 Third and last line.

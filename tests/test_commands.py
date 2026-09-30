@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -7,6 +8,8 @@ import pytest
 from repl.core.commands import (
     CatCommand,
     CdCommand,
+    ChmodCommand,
+    ChownCommand,
     CommandContext,
     ExitCommand,
     LsCommand,
@@ -14,7 +17,9 @@ from repl.core.commands import (
     VfsInfoCommand,
 )
 from repl.core.errors import CommandArgsError
+from repl.core.shell import Shell
 from repl.core.vfs import VDir, VFile, VFS
+from repl.core.vfs_loader import load_vfs
 
 
 def make_vfs() -> VFS:
@@ -373,6 +378,199 @@ def test_tac_missing_file_operand() -> None:
 def test_tac_invalid_option() -> None:
     with pytest.raises(CommandArgsError, match=r"tac: invalid option -- 'x'"):
         TacCommand().run(["-x", "/var/logs/one.log"], make_ctx())
+
+
+# -- chmod --------------------------------------------------------------
+
+
+def test_chmod_octal_sets_absolute_mode() -> None:
+    ctx = make_ctx()
+    result = ChmodCommand().run(["600", "/home/user/docs/notes.txt"], ctx)
+    assert result.output == ""
+    assert result.error == ""
+    assert result.exit_code == 0
+    assert ctx.vfs.resolve("/home/user/docs/notes.txt").mode == 0o600
+
+
+def test_chmod_symbolic_single_clause() -> None:
+    ctx = make_ctx()
+    ChmodCommand().run(["u+x", "/home/user/docs/notes.txt"], ctx)
+    assert ctx.vfs.resolve("/home/user/docs/notes.txt").mode == 0o744
+
+
+def test_chmod_symbolic_comma_list_with_equals() -> None:
+    ctx = make_ctx()
+    ChmodCommand().run(["u=rwx,g=rx,o=", "/home/user/docs/notes.txt"], ctx)
+    assert ctx.vfs.resolve("/home/user/docs/notes.txt").mode == 0o750
+
+
+def test_chmod_dash_x_is_treated_as_mode_not_option() -> None:
+    ctx = make_ctx()
+    result = ChmodCommand().run(["-x", "/bin/tool"], ctx)
+    assert result.exit_code == 0
+    assert ctx.vfs.resolve("/bin/tool").mode == 0o644
+
+
+def test_chmod_recursive_applies_to_directory_and_descendants() -> None:
+    ctx = make_ctx()
+    ChmodCommand().run(["-R", "700", "/home/user/docs"], ctx)
+    docs = ctx.vfs.resolve("/home/user/docs")
+    assert docs.mode == 0o700
+    assert docs.children["notes.txt"].mode == 0o700
+    assert docs.children["empty.txt"].mode == 0o700
+
+
+def test_chmod_missing_operand() -> None:
+    with pytest.raises(CommandArgsError, match="chmod: missing operand"):
+        ChmodCommand().run([], make_ctx())
+
+
+def test_chmod_missing_operand_after_mode() -> None:
+    with pytest.raises(CommandArgsError, match=r"chmod: missing operand after '755'"):
+        ChmodCommand().run(["755"], make_ctx())
+
+
+def test_chmod_invalid_mode() -> None:
+    result = ChmodCommand().run(["xyz", "/home/user/docs/notes.txt"], make_ctx())
+    assert result.output == ""
+    assert result.error == "chmod: invalid mode: 'xyz'"
+    assert result.exit_code == 1
+
+
+def test_chmod_cannot_access_reports_error_and_continues() -> None:
+    ctx = make_ctx()
+    result = ChmodCommand().run(["600", "/nope", "/home/user/docs/notes.txt"], ctx)
+    assert result.error == "chmod: cannot access '/nope': No such file or directory"
+    assert result.exit_code == 1
+    assert ctx.vfs.resolve("/home/user/docs/notes.txt").mode == 0o600
+
+
+def test_chmod_rejects_unknown_option() -> None:
+    with pytest.raises(CommandArgsError, match=r"chmod: invalid option -- 'z'"):
+        ChmodCommand().run(["-z", "600", "/home/user/docs/notes.txt"], make_ctx())
+
+
+def test_chmod_malformed_dash_mode_is_invalid_mode_not_option() -> None:
+    result = ChmodCommand().run(["-wz", "/home/user/docs/notes.txt"], make_ctx())
+    assert result.error == "chmod: invalid mode: '-wz'"
+    assert result.exit_code == 1
+
+
+# -- chown --------------------------------------------------------------
+
+
+def test_chown_user_only_changes_owner_leaves_group() -> None:
+    ctx = make_ctx()
+    result = ChownCommand().run(["alice", "/home/user/docs/notes.txt"], ctx)
+    assert result.output == ""
+    assert result.error == ""
+    assert result.exit_code == 0
+    node = ctx.vfs.resolve("/home/user/docs/notes.txt")
+    assert node.owner == "alice"
+    assert node.group == "user"
+
+
+def test_chown_user_colon_group_sets_both() -> None:
+    ctx = make_ctx()
+    ChownCommand().run(["alice:staff", "/home/user/docs/notes.txt"], ctx)
+    node = ctx.vfs.resolve("/home/user/docs/notes.txt")
+    assert node.owner == "alice"
+    assert node.group == "staff"
+
+
+def test_chown_user_colon_leaves_group_unchanged() -> None:
+    ctx = make_ctx()
+    ChownCommand().run(["bob:", "/home/user/docs/notes.txt"], ctx)
+    node = ctx.vfs.resolve("/home/user/docs/notes.txt")
+    assert node.owner == "bob"
+    assert node.group == "user"
+
+
+def test_chown_colon_group_leaves_owner_unchanged() -> None:
+    ctx = make_ctx()
+    ChownCommand().run([":wheel", "/home/user/docs/notes.txt"], ctx)
+    node = ctx.vfs.resolve("/home/user/docs/notes.txt")
+    assert node.owner == "user"
+    assert node.group == "wheel"
+
+
+def test_chown_numeric_uid_and_gid() -> None:
+    ctx = make_ctx()
+    ChownCommand().run(["1000:1000", "/home/user/docs/notes.txt"], ctx)
+    node = ctx.vfs.resolve("/home/user/docs/notes.txt")
+    assert node.owner == "1000"
+    assert node.group == "1000"
+
+
+def test_chown_recursive_applies_to_directory_and_descendants() -> None:
+    ctx = make_ctx()
+    ChownCommand().run(["-R", "root:root", "/home/user/docs"], ctx)
+    docs = ctx.vfs.resolve("/home/user/docs")
+    assert docs.owner == "root"
+    assert docs.group == "root"
+    assert docs.children["notes.txt"].owner == "root"
+    assert docs.children["empty.txt"].group == "root"
+
+
+def test_chown_missing_operand() -> None:
+    with pytest.raises(CommandArgsError, match="chown: missing operand"):
+        ChownCommand().run([], make_ctx())
+
+
+def test_chown_missing_operand_after_owner() -> None:
+    with pytest.raises(CommandArgsError, match=r"chown: missing operand after 'alice'"):
+        ChownCommand().run(["alice"], make_ctx())
+
+
+def test_chown_invalid_user() -> None:
+    result = ChownCommand().run(["Not-Valid!", "/home/user/docs/notes.txt"], make_ctx())
+    assert result.error == "chown: invalid user: 'Not-Valid!'"
+    assert result.exit_code == 1
+
+
+def test_chown_invalid_group() -> None:
+    result = ChownCommand().run(["alice:BAD!", "/home/user/docs/notes.txt"], make_ctx())
+    assert result.error == "chown: invalid group: 'BAD!'"
+    assert result.exit_code == 1
+
+
+def test_chown_bare_colon_is_invalid() -> None:
+    result = ChownCommand().run([":", "/home/user/docs/notes.txt"], make_ctx())
+    assert result.error == "chown: invalid user: ':'"
+    assert result.exit_code == 1
+
+
+def test_chown_cannot_access_reports_error_and_continues() -> None:
+    ctx = make_ctx()
+    result = ChownCommand().run(["alice", "/nope", "/home/user/docs/notes.txt"], ctx)
+    assert result.error == "chown: cannot access '/nope': No such file or directory"
+    assert result.exit_code == 1
+    assert ctx.vfs.resolve("/home/user/docs/notes.txt").owner == "alice"
+
+
+def test_chown_rejects_unknown_option() -> None:
+    with pytest.raises(CommandArgsError, match=r"chown: invalid option -- 'z'"):
+        ChownCommand().run(["-z", "alice", "/home/user/docs/notes.txt"], make_ctx())
+
+
+# -- chmod/chown never touch the VFS's XML source on disk ------------------
+
+
+def test_chmod_and_chown_do_not_modify_the_vfs_source_file() -> None:
+    path = Path(__file__).resolve().parent.parent / "vfs" / "deep.xml"
+    before = hashlib.sha256(path.read_bytes()).hexdigest()
+
+    shell = Shell(vfs=load_vfs(path))
+    shell.execute("chmod 700 /home/user/docs/notes.txt")
+    shell.execute("chmod -R u+x /home/user")
+    shell.execute("chown alice:staff /home/user/docs/notes.txt")
+    shell.execute("chown -R root /home/user")
+
+    after = hashlib.sha256(path.read_bytes()).hexdigest()
+    assert after == before
+    # vfs-info keeps reporting the source file's hash, unaffected by the
+    # in-memory edits above.
+    assert shell.vfs.sha256 == before
 
 
 # -- vfs-info ----------------------------------------------------------

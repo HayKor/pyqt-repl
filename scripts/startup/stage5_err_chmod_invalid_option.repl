@@ -1,0 +1,5 @@
+# stage5_err_chmod_invalid_option.repl -- an unknown chmod option aborts
+# the script.
+
+chmod 755 /home/user/docs/notes.txt
+chmod -z 755 /home/user/docs/notes.txt
