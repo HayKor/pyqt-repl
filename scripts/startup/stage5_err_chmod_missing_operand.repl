@@ -1,0 +1,5 @@
+# stage5_err_chmod_missing_operand.repl -- MODE with no FILE operand
+# aborts the script.
+
+chmod 755 /home/user/docs/notes.txt
+chmod 755

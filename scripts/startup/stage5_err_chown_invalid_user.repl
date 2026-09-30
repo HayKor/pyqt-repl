@@ -1,0 +1,5 @@
+# stage5_err_chown_invalid_user.repl -- an invalid OWNER name aborts the
+# script.
+
+chown alice /home/user/docs/notes.txt
+chown Not-Valid! /home/user/docs/notes.txt

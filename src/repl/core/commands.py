@@ -3,6 +3,8 @@
 ``ls`` and ``cd`` are real now: they resolve paths against ``ctx.vfs``
 (``VFS.resolve``/``normalize``) instead of just echoing their arguments.
 ``cat``/``tac`` are new commands that read file content out of the VFS.
+``chmod``/``chown`` change a node's ``mode``/``owner``/``group`` in place
+(in memory only; nothing is ever written back to the VFS's XML source).
 ``vfs-info`` is unchanged from the previous stage.
 
 None of this module imports Qt; everything here is plain Python over the
@@ -12,19 +14,22 @@ in-memory VFS model from ``core/vfs.py``.
 from __future__ import annotations
 
 import math
+import re
 import stat
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from typing import ClassVar
 
 from .errors import CommandArgsError, VFSPathError
+from .modes import ModeError, looks_like_symbolic_mode, parse_mode
 from .vfs import VDir, VFile, VFS, VNode
 
 _LS_VALID_OPTIONS = frozenset("alh")
 _CAT_VALID_OPTIONS = frozenset("n")
 _DIR_SIZE = 4096
 _SIZE_UNITS = ("", "K", "M", "G", "T", "P")
+_OWNER_NAME_RE = re.compile(r"[a-z_][a-z0-9_-]*|[0-9]+")
 
 
 @dataclass
@@ -351,6 +356,154 @@ class TacCommand(Command):
         return CommandResult(output=output, error="\n".join(errors), exit_code=exit_code)
 
 
+def _walk(node: VNode) -> Iterator[VNode]:
+    """Yield ``node`` itself, then (for a directory) every descendant.
+
+    Shared by ``chmod -R``/``chown -R`` to apply their change to a whole
+    subtree instead of just the named node.
+    """
+    yield node
+    if isinstance(node, VDir):
+        for child in node.children.values():
+            yield from _walk(child)
+
+
+def _resolve_targets(
+    cmd: str, paths: list[str], ctx: CommandContext, *, recursive: bool
+) -> tuple[list[VNode], list[str]]:
+    """Resolve ``paths`` against ``ctx``, expanding each via ``_walk`` if
+    ``recursive``. Returns ``(targets, error_messages)``; a path that
+    fails to resolve contributes only to the error list, exactly like
+    ``cat``/``tac``'s per-path error handling.
+    """
+    targets: list[VNode] = []
+    errors: list[str] = []
+    for p in paths:
+        try:
+            node = ctx.vfs.resolve(p, ctx.cwd)
+        except VFSPathError as exc:
+            errors.append(f"{cmd}: cannot access '{p}': {exc.reason}")
+            continue
+        targets.extend(_walk(node) if recursive else [node])
+    return targets, errors
+
+
+class ChmodCommand(Command):
+    name = "chmod"
+
+    def run(self, args: list[str], ctx: CommandContext) -> CommandResult:
+        recursive = False
+        mode_spec: str | None = None
+        paths: list[str] = []
+
+        for arg in args:
+            is_dash_option = arg.startswith("-") and len(arg) > 1
+            if arg == "-R":
+                recursive = True
+            elif mode_spec is None and is_dash_option and looks_like_symbolic_mode(arg):
+                mode_spec = arg
+            elif is_dash_option:
+                raise CommandArgsError(f"chmod: invalid option -- '{arg[1]}'")
+            elif mode_spec is None:
+                mode_spec = arg
+            else:
+                paths.append(arg)
+
+        if mode_spec is None:
+            raise CommandArgsError("chmod: missing operand")
+        if not paths:
+            raise CommandArgsError(f"chmod: missing operand after '{mode_spec}'")
+
+        try:
+            parse_mode(mode_spec, 0)
+        except ModeError:
+            return CommandResult(error=f"chmod: invalid mode: '{mode_spec}'", exit_code=1)
+
+        targets, errors = _resolve_targets("chmod", paths, ctx, recursive=recursive)
+        for node in targets:
+            node.mode = parse_mode(mode_spec, node.mode)
+
+        return CommandResult(error="\n".join(errors), exit_code=1 if errors else 0)
+
+
+class _InvalidOwnerSpec(Exception):
+    """Raised by ``_parse_owner_spec`` for a malformed OWNER[:GROUP] spec."""
+
+
+def _valid_owner_name(name: str) -> bool:
+    return bool(_OWNER_NAME_RE.fullmatch(name))
+
+
+def _parse_owner_spec(spec: str) -> tuple[str | None, str | None]:
+    """Parse ``OWNER[:GROUP]`` into ``(new_owner, new_group)``.
+
+    Either half is ``None`` when that part should be left unchanged:
+    ``"user"``/``"user:"`` leave the group alone (a simplification of
+    GNU's "user's login group" behaviour, documented in the plan/README),
+    ``":group"`` leaves the owner alone. Raises ``_InvalidOwnerSpec`` for
+    an empty spec, a bare ``":"``, or a name that is neither
+    ``^[a-z_][a-z0-9_-]*$`` nor purely numeric (uid/gid stored as text).
+    """
+    if ":" not in spec:
+        if not _valid_owner_name(spec):
+            raise _InvalidOwnerSpec(f"invalid user: '{spec}'")
+        return spec, None
+
+    owner_part, group_part = spec.split(":", 1)
+    if owner_part == "" and group_part == "":
+        raise _InvalidOwnerSpec(f"invalid user: '{spec}'")
+
+    new_owner = None
+    new_group = None
+    if owner_part != "":
+        if not _valid_owner_name(owner_part):
+            raise _InvalidOwnerSpec(f"invalid user: '{owner_part}'")
+        new_owner = owner_part
+    if group_part != "":
+        if not _valid_owner_name(group_part):
+            raise _InvalidOwnerSpec(f"invalid group: '{group_part}'")
+        new_group = group_part
+    return new_owner, new_group
+
+
+class ChownCommand(Command):
+    name = "chown"
+
+    def run(self, args: list[str], ctx: CommandContext) -> CommandResult:
+        recursive = False
+        owner_spec: str | None = None
+        paths: list[str] = []
+
+        for arg in args:
+            if arg == "-R":
+                recursive = True
+            elif arg.startswith("-") and len(arg) > 1:
+                raise CommandArgsError(f"chown: invalid option -- '{arg[1]}'")
+            elif owner_spec is None:
+                owner_spec = arg
+            else:
+                paths.append(arg)
+
+        if owner_spec is None:
+            raise CommandArgsError("chown: missing operand")
+        if not paths:
+            raise CommandArgsError(f"chown: missing operand after '{owner_spec}'")
+
+        try:
+            new_owner, new_group = _parse_owner_spec(owner_spec)
+        except _InvalidOwnerSpec as exc:
+            return CommandResult(error=f"chown: {exc}", exit_code=1)
+
+        targets, errors = _resolve_targets("chown", paths, ctx, recursive=recursive)
+        for node in targets:
+            if new_owner is not None:
+                node.owner = new_owner
+            if new_group is not None:
+                node.group = new_group
+
+        return CommandResult(error="\n".join(errors), exit_code=1 if errors else 0)
+
+
 class VfsInfoCommand(Command):
     name = "vfs-info"
 
@@ -369,5 +522,7 @@ REGISTRY: dict[str, Command] = {
     "exit": ExitCommand(),
     "cat": CatCommand(),
     "tac": TacCommand(),
+    "chmod": ChmodCommand(),
+    "chown": ChownCommand(),
     "vfs-info": VfsInfoCommand(),
 }
