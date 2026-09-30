@@ -1,0 +1,4 @@
+# stage4_err_cd_into_file.repl -- cd into a regular file aborts the script.
+
+cd $HOME
+cd .profile

@@ -1,0 +1,5 @@
+# stage4_err_cd_missing_path.repl -- cd to a nonexistent path aborts the
+# script.
+
+cd $HOME
+cd /no/such/path

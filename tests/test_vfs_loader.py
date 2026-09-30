@@ -84,7 +84,7 @@ def test_sha256_matches_raw_bytes() -> None:
 
 def test_describe_counts_dirs_and_files() -> None:
     vfs = load_vfs(_VFS_DIR / "deep.xml")
-    assert describe(vfs) == "[vfs] loaded 'deep' (11 dirs, 6 files)"
+    assert describe(vfs) == "[vfs] loaded 'deep' (11 dirs, 7 files)"
 
 
 def test_describe_empty_vfs() -> None:

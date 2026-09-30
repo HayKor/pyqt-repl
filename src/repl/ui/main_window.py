@@ -43,9 +43,8 @@ class MainWindow(QMainWindow):
         if self.config.script_path is not None:
             QTimer.singleShot(0, self.run_startup_script)
 
-    @staticmethod
-    def _prompt() -> str:
-        return f"{username()}@{hostname()}:~$ "
+    def _prompt(self) -> str:
+        return f"{username()}@{hostname()}:{self.shell.cwd}$ "
 
     def _load_vfs(self, path: Path) -> None:
         """Load ``path`` into ``self.shell.vfs``, reporting the outcome.
@@ -65,6 +64,7 @@ class MainWindow(QMainWindow):
     def _on_command(self, line: str) -> None:
         result = self.shell.execute(line)
         self._show_result(result)
+        self.terminal.set_prompt(self._prompt())
         if result.should_exit:
             self._exit_app(result.exit_code)
 
@@ -106,6 +106,7 @@ class MainWindow(QMainWindow):
         for last_step in iter_script(self.shell, lines):
             self.terminal.echo_command(last_step.line)
             self._show_result(last_step.result)
+            self.terminal.set_prompt(self._prompt())
 
         if last_step is None:
             return

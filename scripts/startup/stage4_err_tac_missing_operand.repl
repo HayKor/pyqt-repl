@@ -1,0 +1,5 @@
+# stage4_err_tac_missing_operand.repl -- tac with no file operand aborts
+# the script.
+
+cat $HOME/docs/notes.txt
+tac

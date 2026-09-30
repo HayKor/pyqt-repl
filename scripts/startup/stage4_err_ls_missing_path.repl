@@ -1,0 +1,5 @@
+# stage4_err_ls_missing_path.repl -- ls on a nonexistent path aborts the
+# script.
+
+ls -l $HOME
+ls /no/such/path

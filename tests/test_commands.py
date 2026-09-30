@@ -1,36 +1,189 @@
+from __future__ import annotations
+
 from pathlib import Path
 
 import pytest
 
-from repl.core.commands import CdCommand, CommandContext, ExitCommand, LsCommand, VfsInfoCommand
+from repl.core.commands import (
+    CatCommand,
+    CdCommand,
+    CommandContext,
+    ExitCommand,
+    LsCommand,
+    TacCommand,
+    VfsInfoCommand,
+)
 from repl.core.errors import CommandArgsError
-from repl.core.vfs import VFS
+from repl.core.vfs import VDir, VFile, VFS
 
 
-def make_ctx(last_exit_code: int = 0, vfs: VFS | None = None, cwd: str = "/") -> CommandContext:
+def make_vfs() -> VFS:
+    """A small tree exercising ls/cd/cat/tac: hidden files, an empty file
+    and directory, a large file (for ``-h``), and files without a trailing
+    newline (for ``cat``/``tac``).
+    """
+    notes = VFile(name="notes.txt", mode=0o644, owner="user", group="user", data=b"ab\ncd\n")
+    empty = VFile(name="empty.txt", mode=0o644, owner="user", group="user", data=b"")
+    docs = VDir(
+        name="docs",
+        mode=0o755,
+        owner="user",
+        group="user",
+        children={"notes.txt": notes, "empty.txt": empty},
+    )
+    profile = VFile(name=".profile", mode=0o644, owner="user", group="user", data=b"xy")
+    user = VDir(
+        name="user",
+        mode=0o755,
+        owner="user",
+        group="user",
+        children={"docs": docs, ".profile": profile},
+    )
+    home = VDir(name="home", mode=0o755, owner="root", group="root", children={"user": user})
+
+    motd = VFile(name="motd.txt", mode=0o644, owner="root", group="root", data=b"z\n")
+    etc = VDir(name="etc", mode=0o755, owner="root", group="root", children={"motd.txt": motd})
+
+    big = VFile(name="big.log", mode=0o644, owner="root", group="root", data=b"x" * 1536)
+    one_log = VFile(name="one.log", mode=0o644, owner="root", group="root", data=b"1\n2\n")
+    two_log = VFile(name="two.log", mode=0o644, owner="root", group="root", data=b"3\n4")
+    ab_txt = VFile(name="ab.txt", mode=0o644, owner="root", group="root", data=b"a\nb")
+    logs = VDir(
+        name="logs",
+        mode=0o755,
+        owner="root",
+        group="root",
+        children={"one.log": one_log, "two.log": two_log, "ab.txt": ab_txt},
+    )
+    var = VDir(
+        name="var", mode=0o755, owner="root", group="root", children={"big.log": big, "logs": logs}
+    )
+
+    tmp = VDir(name="tmp", mode=0o777, owner="root", group="root", children={})
+
+    tool = VFile(name="tool", mode=0o755, owner="root", group="root", data=b"AB")
+    bin_dir = VDir(name="bin", mode=0o755, owner="root", group="root", children={"tool": tool})
+
+    root = VDir(
+        name="",
+        mode=0o755,
+        owner="root",
+        group="root",
+        children={"home": home, "etc": etc, "var": var, "tmp": tmp, "bin": bin_dir},
+    )
+    return VFS(name="test", sha256="deadbeef", root=root)
+
+
+def make_ctx(
+    last_exit_code: int = 0,
+    vfs: VFS | None = None,
+    cwd: str = "/",
+    oldpwd: str | None = None,
+) -> CommandContext:
     return CommandContext(
-        vfs=vfs if vfs is not None else VFS.empty(),
+        vfs=vfs if vfs is not None else make_vfs(),
         cwd=cwd,
         last_exit_code=last_exit_code,
         env={},
+        oldpwd=oldpwd,
     )
 
 
-def test_ls_no_args() -> None:
-    result = LsCommand().run([], make_ctx())
-    assert result.output == "ls: args=[]"
+# -- ls ----------------------------------------------------------------
+
+
+def test_ls_no_args_lists_cwd() -> None:
+    result = LsCommand().run([], make_ctx(cwd="/home/user/docs"))
+    assert result.output == "empty.txt  notes.txt"
+    assert result.error == ""
     assert result.exit_code == 0
-    assert result.should_exit is False
 
 
-def test_ls_prints_args() -> None:
-    result = LsCommand().run(["-l", "/home/arthur"], make_ctx())
-    assert result.output == "ls: args=['-l', '/home/arthur']"
+def test_ls_hides_dotfiles_without_a() -> None:
+    result = LsCommand().run([], make_ctx(cwd="/home/user"))
+    assert result.output == "docs"
 
 
-def test_ls_accepts_combined_valid_options() -> None:
-    result = LsCommand().run(["-la", "-h"], make_ctx())
-    assert result.output == "ls: args=['-la', '-h']"
+def test_ls_a_shows_dot_entries_and_hidden_files() -> None:
+    result = LsCommand().run(["-a"], make_ctx(cwd="/home/user"))
+    assert result.output == ".  ..  .profile  docs"
+
+
+def test_ls_l_format_with_total_and_alignment() -> None:
+    result = LsCommand().run(["-l"], make_ctx(cwd="/home/user/docs"))
+    assert result.output == (
+        "total 2\n"
+        "-rw-r--r-- user user  0 empty.txt\n"
+        "-rw-r--r-- user user  6 notes.txt"
+    )
+
+
+def test_ls_l_on_root_shows_directory_modes_and_size_4096() -> None:
+    result = LsCommand().run(["-l"], make_ctx(cwd="/"))
+    assert result.output == (
+        "total 5\n"
+        "drwxr-xr-x root root  4096 bin\n"
+        "drwxr-xr-x root root  4096 etc\n"
+        "drwxr-xr-x root root  4096 home\n"
+        "drwxrwxrwx root root  4096 tmp\n"
+        "drwxr-xr-x root root  4096 var"
+    )
+
+
+def test_ls_lh_formats_large_file_as_human_size() -> None:
+    result = LsCommand().run(["-lh"], make_ctx(cwd="/var"))
+    assert "-rw-r--r-- root root  1.5K big.log" in result.output.splitlines()
+
+
+def test_ls_lh_formats_directory_size_as_human_size() -> None:
+    result = LsCommand().run(["-lh"], make_ctx(cwd="/"))
+    assert "drwxr-xr-x root root  4.0K bin" in result.output.splitlines()
+
+
+def test_ls_h_without_l_is_ignored() -> None:
+    result = LsCommand().run(["-h"], make_ctx(cwd="/home/user/docs"))
+    assert result.output == "empty.txt  notes.txt"
+
+
+def test_ls_single_file_path_short_format() -> None:
+    result = LsCommand().run(["/etc/motd.txt"], make_ctx())
+    assert result.output == "/etc/motd.txt"
+    assert result.exit_code == 0
+
+
+def test_ls_single_file_path_long_format_has_no_total() -> None:
+    result = LsCommand().run(["-l", "/etc/motd.txt"], make_ctx())
+    assert result.output == "-rw-r--r-- root root  2 /etc/motd.txt"
+
+
+def test_ls_multiple_paths_files_then_dirs_with_headers() -> None:
+    result = LsCommand().run(["/etc/motd.txt", "/tmp"], make_ctx())
+    assert result.output == "/etc/motd.txt\n\n/tmp:"
+
+
+def test_ls_multiple_directories_each_get_a_header() -> None:
+    result = LsCommand().run(["/etc", "/tmp"], make_ctx())
+    assert result.output == "/etc:\nmotd.txt\n\n/tmp:"
+
+
+def test_ls_cannot_access_missing_path() -> None:
+    result = LsCommand().run(["/nope"], make_ctx())
+    assert result.output == ""
+    assert result.error == "ls: cannot access '/nope': No such file or directory"
+    assert result.exit_code == 2
+
+
+def test_ls_cannot_access_not_a_directory() -> None:
+    result = LsCommand().run(["/etc/motd.txt/x"], make_ctx())
+    assert result.error == "ls: cannot access '/etc/motd.txt/x': Not a directory"
+    assert result.exit_code == 2
+
+
+def test_ls_errors_do_not_abort_other_paths() -> None:
+    result = LsCommand().run(["/nope", "/etc/motd.txt"], make_ctx())
+    assert result.output == "/etc/motd.txt"
+    assert result.error == "ls: cannot access '/nope': No such file or directory"
+    assert result.exit_code == 2
 
 
 def test_ls_rejects_unknown_option() -> None:
@@ -43,19 +196,68 @@ def test_ls_rejects_unknown_option_within_combo() -> None:
         LsCommand().run(["-lx"], make_ctx())
 
 
-def test_cd_prints_args() -> None:
-    result = CdCommand().run(["/tmp"], make_ctx())
-    assert result.output == "cd: args=['/tmp']"
+# -- cd ------------------------------------------------------------------
 
 
-def test_cd_no_args() -> None:
-    result = CdCommand().run([], make_ctx())
-    assert result.output == "cd: args=[]"
+def test_cd_no_args_goes_to_root() -> None:
+    ctx = make_ctx(cwd="/home/user/docs")
+    result = CdCommand().run([], ctx)
+    assert ctx.cwd == "/"
+    assert ctx.oldpwd == "/home/user/docs"
+    assert result.output == ""
+    assert result.exit_code == 0
+
+
+def test_cd_into_relative_subdir() -> None:
+    ctx = make_ctx(cwd="/")
+    CdCommand().run(["home/user"], ctx)
+    assert ctx.cwd == "/home/user"
+    assert ctx.oldpwd == "/"
+
+
+def test_cd_dot_dot() -> None:
+    ctx = make_ctx(cwd="/home/user/docs")
+    CdCommand().run([".."], ctx)
+    assert ctx.cwd == "/home/user"
+
+
+def test_cd_nonexistent_path() -> None:
+    ctx = make_ctx(cwd="/")
+    result = CdCommand().run(["/nope"], ctx)
+    assert result.error == "cd: /nope: No such file or directory"
+    assert result.exit_code == 1
+    assert ctx.cwd == "/"
+
+
+def test_cd_into_a_file_is_not_a_directory() -> None:
+    ctx = make_ctx(cwd="/")
+    result = CdCommand().run(["/etc/motd.txt"], ctx)
+    assert result.error == "cd: /etc/motd.txt: Not a directory"
+    assert result.exit_code == 1
+    assert ctx.cwd == "/"
+
+
+def test_cd_dash_without_oldpwd() -> None:
+    result = CdCommand().run(["-"], make_ctx(oldpwd=None))
+    assert result.error == "cd: OLDPWD not set"
+    assert result.exit_code == 1
+
+
+def test_cd_dash_switches_to_oldpwd_and_prints_it() -> None:
+    ctx = make_ctx(cwd="/home/user", oldpwd="/tmp")
+    result = CdCommand().run(["-"], ctx)
+    assert ctx.cwd == "/tmp"
+    assert ctx.oldpwd == "/home/user"
+    assert result.output == "/tmp"
+    assert result.exit_code == 0
 
 
 def test_cd_too_many_arguments() -> None:
     with pytest.raises(CommandArgsError, match="cd: too many arguments"):
         CdCommand().run(["/tmp", "/home"], make_ctx())
+
+
+# -- exit ------------------------------------------------------------------
 
 
 def test_exit_no_args_defaults_to_last_exit_code() -> None:
@@ -86,8 +288,98 @@ def test_exit_too_many_arguments() -> None:
         ExitCommand().run(["1", "2"], make_ctx())
 
 
+# -- cat -------------------------------------------------------------------
+
+
+def test_cat_concatenates_files_in_argument_order() -> None:
+    result = CatCommand().run(["/var/logs/one.log", "/var/logs/two.log"], make_ctx())
+    assert result.output == "1\n2\n3\n4"
+    assert result.exit_code == 0
+
+
+def test_cat_strips_one_trailing_newline() -> None:
+    result = CatCommand().run(["/var/logs/one.log"], make_ctx())
+    assert result.output == "1\n2"
+
+
+def test_cat_n_numbers_lines_across_files() -> None:
+    result = CatCommand().run(["-n", "/var/logs/one.log", "/var/logs/two.log"], make_ctx())
+    assert result.output == "     1\t1\n     2\t2\n     3\t3\n     4\t4"
+
+
+def test_cat_missing_file_reports_error_and_continues() -> None:
+    result = CatCommand().run(["/nope", "/var/logs/one.log"], make_ctx())
+    assert result.output == "1\n2"
+    assert result.error == "cat: /nope: No such file or directory"
+    assert result.exit_code == 1
+
+
+def test_cat_directory_is_an_error() -> None:
+    result = CatCommand().run(["/var"], make_ctx())
+    assert result.output == ""
+    assert result.error == "cat: /var: Is a directory"
+    assert result.exit_code == 1
+
+
+def test_cat_missing_file_operand() -> None:
+    with pytest.raises(CommandArgsError, match="cat: missing file operand"):
+        CatCommand().run([], make_ctx())
+
+
+def test_cat_invalid_option() -> None:
+    with pytest.raises(CommandArgsError, match=r"cat: invalid option -- 'x'"):
+        CatCommand().run(["-x", "/var/logs/one.log"], make_ctx())
+
+
+# -- tac ---------------------------------------------------------------
+
+
+def test_tac_reverses_lines_within_a_file() -> None:
+    result = TacCommand().run(["/var/logs/one.log"], make_ctx())
+    assert result.output == "2\n1"
+
+
+def test_tac_glues_last_unterminated_line_gnu_style() -> None:
+    # Matches GNU: `printf 'a\nb' | tac` -> "ba\n" (before this project's
+    # blanket "no trailing newline in command output" convention strips it).
+    result = TacCommand().run(["/var/logs/ab.txt"], make_ctx())
+    assert result.output == "ba"
+
+
+def test_tac_processes_each_file_independently_in_argument_order() -> None:
+    result = TacCommand().run(["/var/logs/two.log", "/var/logs/one.log"], make_ctx())
+    assert result.output == "43\n2\n1"
+
+
+def test_tac_missing_file_reports_error_and_continues() -> None:
+    result = TacCommand().run(["/nope", "/var/logs/one.log"], make_ctx())
+    assert result.output == "2\n1"
+    assert result.error == "tac: /nope: No such file or directory"
+    assert result.exit_code == 1
+
+
+def test_tac_directory_is_an_error() -> None:
+    result = TacCommand().run(["/var"], make_ctx())
+    assert result.output == ""
+    assert result.error == "tac: /var: Is a directory"
+    assert result.exit_code == 1
+
+
+def test_tac_missing_file_operand() -> None:
+    with pytest.raises(CommandArgsError, match="tac: missing file operand"):
+        TacCommand().run([], make_ctx())
+
+
+def test_tac_invalid_option() -> None:
+    with pytest.raises(CommandArgsError, match=r"tac: invalid option -- 'x'"):
+        TacCommand().run(["-x", "/var/logs/one.log"], make_ctx())
+
+
+# -- vfs-info ----------------------------------------------------------
+
+
 def test_vfs_info_not_loaded() -> None:
-    result = VfsInfoCommand().run([], make_ctx())
+    result = VfsInfoCommand().run([], make_ctx(vfs=VFS.empty()))
     assert result.output == ""
     assert result.error == "vfs-info: no VFS loaded"
     assert result.exit_code == 1

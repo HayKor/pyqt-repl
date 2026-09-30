@@ -1,5 +1,6 @@
-# exit.repl -- a few commands, then exit with a specific code.
+# exit.repl -- a few commands, then exit with a specific code. Uses only
+# "/" so it keeps working whether or not a VFS is loaded.
 
-ls -l $HOME
-cd /tmp
+ls -l /
+cd /
 exit 3
