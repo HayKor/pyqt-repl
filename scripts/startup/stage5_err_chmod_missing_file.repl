@@ -1,0 +1,5 @@
+# stage5_err_chmod_missing_file.repl -- chmod on a nonexistent path aborts
+# the script.
+
+chmod 755 /home/user/docs/notes.txt
+chmod 755 /no/such/file
