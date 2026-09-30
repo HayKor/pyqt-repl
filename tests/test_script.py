@@ -8,10 +8,20 @@ import pytest
 from repl.core.errors import ScriptError
 from repl.core.script import abort_message, is_blank_or_comment, iter_script, load_script
 from repl.core.shell import Shell
+from repl.core.vfs import VDir, VFS
+
+
+def make_vfs() -> VFS:
+    tmp = VDir(name="tmp", mode=0o755, owner="root", group="root", children={})
+    zero = VDir(name="0", mode=0o755, owner="root", group="root", children={})
+    root = VDir(
+        name="", mode=0o755, owner="root", group="root", children={"tmp": tmp, "0": zero}
+    )
+    return VFS(name="test", sha256="deadbeef", root=root)
 
 
 def make_shell() -> Shell:
-    return Shell(env={"HOME": "/home/arthur"})
+    return Shell(env={"HOME": "/"}, vfs=make_vfs())
 
 
 def test_is_blank_or_comment() -> None:
@@ -28,8 +38,11 @@ def test_iter_script_skips_blank_and_comment_lines() -> None:
     lines = ["# header", "", "ls -l $HOME", "  ", "cd /tmp"]
     steps = list(iter_script(shell, lines))
     assert [step.lineno for step in steps] == [3, 5]
-    assert steps[0].result.stdout == "ls: args=['-l', '/home/arthur']"
-    assert steps[1].result.stdout == "cd: args=['/tmp']"
+    assert steps[0].result.stdout == (
+        "total 2\ndrwxr-xr-x root root  4096 0\ndrwxr-xr-x root root  4096 tmp"
+    )
+    assert steps[1].result.stdout == ""
+    assert steps[1].result.exit_code == 0
 
 
 def test_iter_script_stops_on_first_error() -> None:
@@ -53,10 +66,13 @@ def test_iter_script_stops_on_exit() -> None:
 
 def test_status_variable_carries_between_script_lines() -> None:
     shell = make_shell()
-    lines = ["ls -l $HOME", 'ls "code=$?"']
+    lines = ["ls -l $HOME", 'cd "/$?"']
     steps = list(iter_script(shell, lines))
     assert len(steps) == 2
-    assert steps[1].result.stdout == "ls: args=['code=0']"
+    # $? expanded to "0" after the successful `ls`, so "/$?" became "/0",
+    # a real directory -- proving the substitution happened.
+    assert steps[1].result.exit_code == 0
+    assert shell.cwd == "/0"
 
 
 def test_abort_message_format() -> None:

@@ -1,9 +1,21 @@
 from repl.core.shell import Shell
-from repl.core.vfs import VFS
+from repl.core.vfs import VDir, VFile, VFS
+
+
+def make_vfs() -> VFS:
+    notes = VFile(name="notes.txt", mode=0o644, owner="user", group="user", data=b"hi\n")
+    docs = VDir(name="docs", mode=0o755, owner="user", group="user", children={"notes.txt": notes})
+    user = VDir(name="user", mode=0o755, owner="user", group="user", children={"docs": docs})
+    home = VDir(name="home", mode=0o755, owner="root", group="root", children={"user": user})
+    # A root-level dir literally named "2", used to observe $? expansion via
+    # a successful `cd "/$?"` after a command that sets last_exit_code to 2.
+    two = VDir(name="2", mode=0o755, owner="root", group="root", children={})
+    root = VDir(name="", mode=0o755, owner="root", group="root", children={"home": home, "2": two})
+    return VFS(name="test", sha256="deadbeef", root=root)
 
 
 def make_shell() -> Shell:
-    return Shell(env={"HOME": "/home/arthur"})
+    return Shell(env={"HOME": "/home/user"}, vfs=make_vfs())
 
 
 def test_empty_line_is_noop() -> None:
@@ -19,7 +31,7 @@ def test_empty_line_is_noop() -> None:
 def test_ls_with_expansion() -> None:
     shell = make_shell()
     result = shell.execute("ls -l $HOME")
-    assert result.stdout == "ls: args=['-l', '/home/arthur']"
+    assert result.stdout == "total 1\ndrwxr-xr-x user user  4096 docs"
     assert result.stderr == ""
     assert result.exit_code == 0
     assert shell.last_exit_code == 0
@@ -33,11 +45,14 @@ def test_cd_too_many_arguments_from_plan_example() -> None:
     assert shell.last_exit_code == 2
 
 
-def test_cd_single_quoted_literal() -> None:
+def test_cd_single_quoted_literal_does_not_expand() -> None:
     shell = make_shell()
     result = shell.execute("cd '$HOME'")
-    assert result.stdout == "cd: args=['$HOME']"
-    assert result.exit_code == 0
+    # Proves single quotes suppressed expansion: cd looked for a literal
+    # "$HOME" entry (which does not exist) rather than following the real
+    # $HOME path.
+    assert result.stderr == "cd: $HOME: No such file or directory"
+    assert result.exit_code == 1
 
 
 def test_ls_invalid_option() -> None:
@@ -89,8 +104,26 @@ def test_exit_with_explicit_code() -> None:
 def test_status_variable_expansion() -> None:
     shell = make_shell()
     shell.execute("ls -z")  # last_exit_code becomes 2
-    result = shell.execute('ls "code=$?"')
-    assert result.stdout == "ls: args=['code=2']"
+    result = shell.execute('cd "/$?"')
+    assert result.exit_code == 0
+    assert shell.cwd == "/2"
+
+
+def test_cd_updates_cwd_and_oldpwd() -> None:
+    shell = make_shell()
+    assert shell.oldpwd is None
+    shell.execute("cd /home/user")
+    assert shell.cwd == "/home/user"
+    assert shell.oldpwd == "/"
+
+
+def test_cd_dash_round_trip() -> None:
+    shell = make_shell()
+    shell.execute("cd /home/user/docs")
+    result = shell.execute("cd -")
+    assert result.stdout == "/"
+    assert shell.cwd == "/"
+    assert shell.oldpwd == "/home/user/docs"
 
 
 def test_default_vfs_is_empty() -> None:

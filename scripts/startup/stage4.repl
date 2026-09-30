@@ -1,0 +1,24 @@
+# stage4.repl -- every ls/cd/cat/tac mode against vfs/deep.xml, in their
+# successful forms, then one error at the end (the emulator aborts on the
+# first failing command, so the error demos live in separate
+# stage4_err_*.repl scripts instead).
+# Run with --vfs vfs/deep.xml and HOME=/home/user (see scripts/stage4.sh).
+
+ls
+ls -a $HOME
+cd $HOME
+ls -l
+ls -lh /var/log
+cd docs
+ls -la
+cat notes.txt
+cat -n notes.txt
+tac notes.txt
+cd ..
+cd -
+ls /etc/app/conf.d /usr/bin
+cat /etc/app/conf.d/x.conf /var/log/app.log
+tac /var/log/app.log
+cd /
+vfs-info
+vfs-info extra
