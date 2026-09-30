@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<vfs name="duplicate">
+  <dir name="home">
+    <file name="a">one</file>
+    <file name="a">two</file>
+  </dir>
+</vfs>

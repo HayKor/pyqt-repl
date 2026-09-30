@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<vfs name="deep" mode="755" owner="root" group="root">
+  <dir name="home">
+    <dir name="user" owner="user" group="user">
+      <dir name="docs">
+        <file name="notes.txt" mode="644" owner="user" group="user">First line of notes.
+Second line of notes.
+Third and last line.
+</file>
+        <file name="empty.txt" owner="user" group="user"></file>
+      </dir>
+      <file name=".profile" owner="user" group="user">export PATH=/usr/bin
+export HOME=/home/user</file>
+    </dir>
+  </dir>
+  <dir name="etc">
+    <dir name="app">
+      <dir name="conf.d">
+        <file name="x.conf" mode="644">listen = 8080
+debug = false
+</file>
+      </dir>
+    </dir>
+  </dir>
+  <dir name="var">
+    <dir name="log">
+      <file name="app.log" mode="644">app started
+app ready
+app stopped
+</file>
+    </dir>
+  </dir>
+  <dir name="usr">
+    <dir name="bin">
+      <file name="tool" mode="755" encoding="base64">iVBORw0KGgo=</file>
+    </dir>
+  </dir>
+  <dir name="tmp" mode="777"/>
+</vfs>

@@ -1,7 +1,8 @@
 """Command-line configuration: parsing and its debug representation.
 
-This stage only accepts and reports the VFS and startup-script paths; the
-VFS itself is not loaded here (that is stage 3's job). Contains no Qt
+This module only accepts and reports the VFS and startup-script paths;
+loading the VFS image itself is the caller's job (``ui/main_window.py``),
+so ``core/vfs_loader.py`` stays independently testable. Contains no Qt
 imports so ``parse_args`` can run before ``QApplication`` is created.
 """
 
@@ -34,7 +35,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         type=Path,
         default=None,
-        help="path to the virtual file system image (not loaded until stage 3)",
+        help="path to the virtual file system image (XML)",
     )
     parser.add_argument(
         "--script",
