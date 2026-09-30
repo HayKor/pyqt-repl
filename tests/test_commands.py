@@ -450,6 +450,12 @@ def test_chmod_rejects_unknown_option() -> None:
         ChmodCommand().run(["-z", "600", "/home/user/docs/notes.txt"], make_ctx())
 
 
+def test_chmod_malformed_dash_mode_is_invalid_mode_not_option() -> None:
+    result = ChmodCommand().run(["-wz", "/home/user/docs/notes.txt"], make_ctx())
+    assert result.error == "chmod: invalid mode: '-wz'"
+    assert result.exit_code == 1
+
+
 # -- chown --------------------------------------------------------------
 
 

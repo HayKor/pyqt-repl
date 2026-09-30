@@ -388,6 +388,9 @@ def _resolve_targets(
     return targets, errors
 
 
+_CHMOD_MODE_LETTERS = frozenset("rwxXst")
+
+
 class ChmodCommand(Command):
     name = "chmod"
 
@@ -400,7 +403,11 @@ class ChmodCommand(Command):
             is_dash_option = arg.startswith("-") and len(arg) > 1
             if arg == "-R":
                 recursive = True
-            elif mode_spec is None and is_dash_option and looks_like_symbolic_mode(arg):
+            elif mode_spec is None and is_dash_option and (
+                arg[1] in _CHMOD_MODE_LETTERS or looks_like_symbolic_mode(arg)
+            ):
+                # Like GNU: "-x" or even a malformed "-wz" is the MODE operand,
+                # so the latter is reported as an invalid mode, not an option.
                 mode_spec = arg
             elif is_dash_option:
                 raise CommandArgsError(f"chmod: invalid option -- '{arg[1]}'")
