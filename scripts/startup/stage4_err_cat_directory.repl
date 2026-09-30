@@ -1,0 +1,4 @@
+# stage4_err_cat_directory.repl -- cat on a directory aborts the script.
+
+cat $HOME/docs/notes.txt
+cat /etc

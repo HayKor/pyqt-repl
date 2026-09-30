@@ -1,0 +1,4 @@
+# stage4_err_ls_bad_option.repl -- an invalid ls option aborts the script.
+
+ls -l $HOME
+ls -z

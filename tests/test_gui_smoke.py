@@ -16,7 +16,7 @@ from pathlib import Path  # noqa: E402
 from PyQt6.QtWidgets import QApplication  # noqa: E402
 
 from repl.core.config import AppConfig  # noqa: E402
-from repl.core.sysinfo import window_title  # noqa: E402
+from repl.core.sysinfo import hostname, username, window_title  # noqa: E402
 from repl.ui.main_window import MainWindow  # noqa: E402
 
 
@@ -32,10 +32,25 @@ def test_window_title_uses_sysinfo(qapp: QApplication) -> None:
 
 def test_command_echo_and_output(qapp: QApplication) -> None:
     window = MainWindow()
-    window.terminal.submit("ls -l /tmp")
+    window.terminal.submit("ls -l /")
     text = window.terminal.output_text()
-    assert f"{window._prompt()}ls -l /tmp" in text
-    assert "ls: args=['-l', '/tmp']" in text
+    assert f"{window._prompt()}ls -l /" in text
+    assert "total 0" in text
+
+
+def test_initial_prompt_is_root(qapp: QApplication) -> None:
+    window = MainWindow()
+    assert window._prompt() == f"{username()}@{hostname()}:/$ "
+
+
+def test_prompt_updates_after_cd(qapp: QApplication) -> None:
+    window = MainWindow(config=AppConfig(vfs_path=_VFS_DIR / "deep.xml"))
+    window.terminal.submit("cd home")
+    assert window._prompt() == f"{username()}@{hostname()}:/home$ "
+    window.terminal.submit("ls")
+    text = window.terminal.output_text()
+    assert f"{window._prompt()}ls" in text
+    assert "user" in text
 
 
 def test_unknown_command_reports_error(qapp: QApplication) -> None:
@@ -81,16 +96,15 @@ def test_debug_lines_shown_with_config(qapp: QApplication, tmp_path: Path) -> No
 
 def test_startup_script_runs_with_echo_and_output(qapp: QApplication, tmp_path: Path) -> None:
     script = tmp_path / "basic.repl"
-    script.write_text("# a comment\nls -l /tmp\ncd /tmp\n")
+    script.write_text("# a comment\nls -l /\ncd /\n")
     window = MainWindow(config=AppConfig(script_path=script))
 
     window.run_startup_script()
 
     text = window.terminal.output_text()
-    assert f"{window._prompt()}ls -l /tmp" in text
-    assert "ls: args=['-l', '/tmp']" in text
-    assert f"{window._prompt()}cd /tmp" in text
-    assert "cd: args=['/tmp']" in text
+    assert f"{window._prompt()}ls -l /" in text
+    assert "total 0" in text
+    assert f"{window._prompt()}cd /" in text
     assert "# a comment" not in text
 
 
@@ -98,7 +112,7 @@ def test_startup_script_error_aborts_and_skips_later_commands(
     qapp: QApplication, tmp_path: Path
 ) -> None:
     script = tmp_path / "with_error.repl"
-    script.write_text("ls -l /tmp\nfoo bar\nls -l /never/reached\n")
+    script.write_text("ls -l /\nfoo bar\nls -l /never/reached\n")
     window = MainWindow(config=AppConfig(script_path=script))
     window.show()
 
@@ -123,7 +137,7 @@ def test_startup_script_missing_file_reports_error(qapp: QApplication, tmp_path:
 
 def test_startup_script_exit_closes_the_window(qapp: QApplication, tmp_path: Path) -> None:
     script = tmp_path / "exit.repl"
-    script.write_text("ls -l /tmp\nexit 3\n")
+    script.write_text("ls -l /\nexit 3\n")
     window = MainWindow(config=AppConfig(script_path=script))
     window.show()
 
@@ -139,7 +153,7 @@ _VFS_DIR = Path(__file__).resolve().parent.parent / "vfs"
 def test_valid_vfs_loads_and_prints_summary(qapp: QApplication) -> None:
     window = MainWindow(config=AppConfig(vfs_path=_VFS_DIR / "deep.xml"))
     text = window.terminal.output_text()
-    assert "[vfs] loaded 'deep' (11 dirs, 6 files)" in text
+    assert "[vfs] loaded 'deep' (11 dirs, 7 files)" in text
     assert window.shell.vfs.loaded is True
     assert window.shell.vfs.name == "deep"
 

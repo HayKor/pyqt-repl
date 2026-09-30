@@ -10,9 +10,9 @@
 
 - `core/parser.py` — токенизатор командной строки (кавычки, `\`, `$VAR`,
   `${VAR}`, `~`, `$?`);
-- `core/commands.py` — команды `ls`/`cd` (по-прежнему заглушки; реальная
-  логика — следующий этап), `exit`, `vfs-info` и их реестр; `Command.run`
-  принимает `CommandContext` (VFS, `cwd`, `$?`, окружение);
+- `core/commands.py` — команды `ls`/`cd` (реальная логика поверх VFS),
+  `cat`/`tac`, `exit`, `vfs-info` и их реестр; `Command.run` принимает
+  `CommandContext` (VFS, `cwd`, `oldpwd`, `$?`, окружение);
 - `core/shell.py` — `Shell.execute(line)`, связывает парсер, команды и VFS,
   превращает исключения в текст ошибки и код возврата (как в bash);
 - `core/vfs.py` — модель VFS в памяти (`VDir`/`VFile`/`VFS`) и разрешение
@@ -138,10 +138,69 @@ world
 Команда `vfs-info` (без аргументов) печатает имя VFS и SHA-256 её XML-файла:
 
 ```
-arthur@host:~$ vfs-info
+arthur@host:/$ vfs-info
 name: demo
 sha256: 3f5a...e1
 ```
+
+## Команды
+
+Приглашение — `user@host:<cwd>$ ` (`/` для корня VFS); `MainWindow` обновляет
+его после каждой команды (и интерактивной, и из стартового скрипта), так что
+эхо следующей строки уже показывает актуальный `cwd`.
+
+Опции разбираются как на этапе 1: `-la` эквивалентно `-l -a`, `--` не
+поддерживается; неизвестная опция → `<cmd>: invalid option -- 'x'` (код 2).
+Ошибки по отдельным путям/файлам не прерывают обработку остальных аргументов:
+сообщения копятся в `stderr`, итоговый код ненулевой, если была хоть одна
+ошибка. Вывод команд никогда не заканчивается переводом строки — его
+добавляет сам виджет терминала.
+
+### `ls [-a] [-l] [-h] [PATH...]`
+
+Работает поверх `ctx.vfs`/`ctx.cwd` (`VFS.resolve`/`normalize`). Без путей —
+листинг `ctx.cwd`. Скрытые (`.`-начинающиеся) элементы показываются только с
+`-a` (вместе с `.`/`..`). Короткий формат — имена через два пробела в одну
+строку, без колонок и без суффиксов у каталогов. `-l` — по строке на
+элемент (`drwxr-xr-x user user  4096 name`; владелец/группа/размер
+выровнены по ширине), перед листингом каталога — строка `total N` (N — число
+показанных элементов, упрощение: реальных блоков диска в модели VFS нет).
+Дат нет — в модели VFS нет времени модификации. `-h` (только вместе с `-l`,
+иначе игнорируется) выводит размеры в духе GNU: `1.5K`, `12M` (одна цифра
+после точки при значении < 10, округление вверх). Путь-файл выводит сам
+файл; несколько путей — сначала файлы, затем каталоги с заголовками `path:`
+и пустой строкой между блоками (как GNU `ls`). Ошибка по пути —
+`ls: cannot access 'x': No such file or directory`/`Not a directory`, код 2.
+
+### `cd [DIR]`
+
+Без аргумента — переход в корень VFS `/` (в модели VFS обычно нет ветки,
+совпадающей с реальным `$HOME`, так что `cd` без аргументов и `cd ~` — это,
+как правило, разные вещи: `~` раскрывается парсером в реальный `$HOME`, что
+почти всегда ведёт к ошибке «No such file or directory» — это ожидаемо).
+`cd -` — переход в предыдущий каталог (`OLDPWD`, хранится в `Shell`/
+`CommandContext`) с печатью нового пути, как в bash; если предыдущего
+каталога ещё нет — `cd: OLDPWD not set` (код 1). Прочие ошибки:
+`cd: x: No such file or directory`, `cd: x: Not a directory` (код 1),
+`cd: too many arguments` (код 2). Права доступа при переходе не проверяются
+(это будет в следующем этапе) — только отображаются через `ls -l`.
+
+### `cat [-n] FILE...`
+
+Конкатенация содержимого файлов; байты декодируются как UTF-8 с
+`errors="replace"`. `-n` — сквозная нумерация строк через все файлы, формат
+GNU `%6d\t%s`. Без аргументов — `cat: missing file operand` (у эмулятора нет
+стандартного ввода, код 2). Каталог в аргументах → `cat: x: Is a directory`;
+отсутствующий файл → `cat: x: No such file or directory`; код 1, но
+остальные файлы всё равно выводятся.
+
+### `tac FILE...`
+
+Построчный вывод в обратном порядке, отдельно для каждого файла (результаты
+идут в порядке аргументов, файлы между собой не перемешиваются). Повторяет
+поведение GNU `tac` при отсутствии завершающего `\n` у последней строки:
+`printf 'a\nb' | tac` → `ba`. Опций нет — любой флаг → invalid option; без
+файлов — `tac: missing file operand`; ошибки по файлам — как у `cat`.
 
 ## Скрипты ОС
 
@@ -161,11 +220,22 @@ sha256: 3f5a...e1
 - `vfs_multi.sh` — несколько файлов в корне, включая скрытый и base64
   (`vfs/multi.xml`);
 - `vfs_deep.sh` — VFS из ≥3 уровней (`vfs/deep.xml`), стартовый скрипт
-  прогоняет все команды этапов 1-3;
+  прогоняет все команды этапов 1-3 (запускается с `HOME=/home/user`, чтобы
+  `$HOME` попадал в дерево VFS);
 - `vfs_errors.sh` — ошибки загрузки VFS: отсутствующий файл, каталог вместо
   файла и каждый образ из `vfs/broken/`;
 - `stage3_errors.sh` — стартовые скрипты с одной ошибкой в конце
-  (неизвестная команда, неверная опция `ls`) и `vfs-info` без `--vfs`.
+  (неизвестная команда, неверная опция `ls`) и `vfs-info` без `--vfs`;
+- `stage4.sh` — `stage4.repl` (все режимы `ls`/`cd`/`cat`/`tac` на
+  `vfs/deep.xml`, `HOME=/home/user`) и по одному `stage4_err_*.repl` на
+  каждую ошибку (`ls` без пути/с неверной опцией, `cd` в файл/по
+  несуществующему пути, `cat` каталога/несуществующего файла, `tac` без
+  аргументов).
+
+Запуск с переопределённым `$HOME` устроен как `uv run env HOME=... repl ...`
+(а не `HOME=... uv run repl ...`), потому что сам `uv` использует `$HOME` для
+своего кеша — переопределять его для процесса `uv` целиком нельзя, только для
+запускаемого им `repl`.
 
 Соответствующие стартовые скрипты эмулятора лежат в `scripts/startup/*.repl`.
 Под офскрин-платформой Qt (`QT_QPA_PLATFORM=offscreen`) запуски, которые не
@@ -200,15 +270,16 @@ src/repl/
 │   ├── errors.py
 │   ├── sysinfo.py
 │   ├── parser.py        # + комментарии `#`
-│   ├── commands.py      # Command.run(args, ctx); ls/cd (заглушки), exit, vfs-info
-│   ├── shell.py         # Shell(vfs=...), CommandContext, cwd
+│   ├── commands.py      # Command.run(args, ctx); ls/cd/cat/tac, exit, vfs-info
+│   ├── shell.py         # Shell(vfs=...), CommandContext, cwd/oldpwd
 │   ├── config.py        # AppConfig, parse_args, format_config
 │   ├── script.py        # load_script, iter_script, abort_message
 │   ├── vfs.py           # VNode/VDir/VFile/VFS, normalize/resolve
 │   └── vfs_loader.py    # load_vfs, describe
 └── ui/
-    ├── main_window.py   # config, debug-вывод, загрузка VFS, запуск стартового скрипта
-    └── terminal.py       # echo_command()
+    ├── main_window.py   # config, debug-вывод, загрузка VFS, запуск стартового скрипта,
+    │                    # приглашение с cwd
+    └── terminal.py       # echo_command(), set_prompt()
 scripts/
 ├── run_default.sh
 ├── run_vfs.sh
@@ -221,6 +292,7 @@ scripts/
 ├── vfs_deep.sh
 ├── vfs_errors.sh
 ├── stage3_errors.sh
+├── stage4.sh
 └── startup/
     ├── basic.repl
     ├── with_error.repl
@@ -229,7 +301,15 @@ scripts/
     ├── vfs_info.repl
     ├── stage3.repl
     ├── stage3_err_unknown.repl
-    └── stage3_err_ls.repl
+    ├── stage3_err_ls.repl
+    ├── stage4.repl
+    ├── stage4_err_ls_missing_path.repl
+    ├── stage4_err_ls_bad_option.repl
+    ├── stage4_err_cd_into_file.repl
+    ├── stage4_err_cd_missing_path.repl
+    ├── stage4_err_cat_directory.repl
+    ├── stage4_err_cat_missing_file.repl
+    └── stage4_err_tac_missing_operand.repl
 vfs/
 ├── minimal.xml
 ├── multi.xml
