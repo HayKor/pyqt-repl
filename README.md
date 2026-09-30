@@ -11,8 +11,10 @@
 - `core/parser.py` — токенизатор командной строки (кавычки, `\`, `$VAR`,
   `${VAR}`, `~`, `$?`);
 - `core/commands.py` — команды `ls`/`cd` (реальная логика поверх VFS),
-  `cat`/`tac`, `exit`, `vfs-info` и их реестр; `Command.run` принимает
-  `CommandContext` (VFS, `cwd`, `oldpwd`, `$?`, окружение);
+  `cat`/`tac`, `chmod`/`chown`, `exit`, `vfs-info` и их реестр; `Command.run`
+  принимает `CommandContext` (VFS, `cwd`, `oldpwd`, `$?`, окружение);
+- `core/modes.py` — разбор MODE для `chmod` (`parse_mode`): восьмеричный и
+  символьный синтаксис;
 - `core/shell.py` — `Shell.execute(line)`, связывает парсер, команды и VFS,
   превращает исключения в текст ошибки и код возврата (как в bash);
 - `core/vfs.py` — модель VFS в памяти (`VDir`/`VFile`/`VFS`) и разрешение
@@ -202,6 +204,39 @@ GNU `%6d\t%s`. Без аргументов — `cat: missing file operand` (у �
 `printf 'a\nb' | tac` → `ba`. Опций нет — любой флаг → invalid option; без
 файлов — `tac: missing file operand`; ошибки по файлам — как у `cat`.
 
+### `chmod [-R] MODE FILE...`
+
+Меняет `mode` узла VFS **только в памяти** (XML-источник не трогается,
+`vfs-info` продолжает показывать его исходный SHA-256). `MODE` — восьмеричный
+(`^0?[0-7]{3}$`, например `755`/`0644`; заменяет права целиком, спецбиты
+setuid/setgid/sticky не поддерживаются — `4755` это invalid mode) или
+символьный: список через запятую из клаузул `[ugoa]*([-+=][rwx]*)+`
+(`u+x`, `go-w`, `a=r`, `+x`, `u=rwx,g=rx,o=`, `u+x-w`); пустое «кто» значит
+`a`; umask не применяется (в эмуляторе его нет); `=` с пустым списком прав
+сбрасывает права роли. `X`, `s`, `t` и копирование другой роли (`u=g`) не
+поддерживаются → invalid mode. `-R` — рекурсивно (сам каталог и все
+потомки, применяет `MODE` заново к текущим правам каждого узла, а не
+копирует получившееся значение). Аргумент вида `-x`/`-w` трактуется как
+`MODE`, если подходит под символьный синтаксис (как GNU `chmod -x file`),
+иначе — как неизвестная опция. Ошибки: `chmod: missing operand` (нет
+аргументов) / `chmod: missing operand after 'MODE'` (нет файлов) — код 2;
+`chmod: invalid mode: 'x'` — код 1; `chmod: cannot access 'x': No such file
+or directory`/`Not a directory` — код 1, остальные файлы обрабатываются;
+`chmod: invalid option -- 'x'` — код 2. Вывода при успехе нет.
+
+### `chown [-R] OWNER[:GROUP] FILE...`
+
+Меняет `owner`/`group` узла VFS, тоже только в памяти. Формы: `user` (меняет
+владельца, группа остаётся прежней), `user:group` (оба), `user:` (владелец
+меняется, группа остаётся прежней — упрощение: в GNU это «группа входа
+пользователя», здесь её просто нет), `:group` (меняется только группа).
+Имена — `^[a-z_][a-z0-9_-]*$` или число (uid/gid хранится как строка);
+пустая спецификация, одиночное `:` или неверное имя →
+`chown: invalid user: 'x'` / `chown: invalid group: 'x'`, код 1. Проверки
+прав нет — эмулятор всегда работает как суперпользователь. `-R` — как у
+`chmod`. Ошибки операндов/путей — как у `chmod` (`chown: missing operand`,
+`chown: cannot access ...`). Вывода при успехе нет.
+
 ## Скрипты ОС
 
 `scripts/*.sh` — исполняемые bash-скрипты, вызывающие эмулятор
@@ -230,7 +265,13 @@ GNU `%6d\t%s`. Без аргументов — `cat: missing file operand` (у �
   `vfs/deep.xml`, `HOME=/home/user`) и по одному `stage4_err_*.repl` на
   каждую ошибку (`ls` без пути/с неверной опцией, `cd` в файл/по
   несуществующему пути, `cat` каталога/несуществующего файла, `tac` без
-  аргументов).
+  аргументов);
+- `stage5.sh` — `stage5.repl` (все режимы `chmod`/`chown` на
+  `vfs/deep.xml`: восьмеричный и символьный `MODE` (включая списки через
+  запятую, `=` и `-x` как `MODE`), `-R`, все формы `OWNER[:GROUP]`,
+  `vfs-info` до и после — хеш не меняется) и по одному `stage5_err_*.repl`
+  на каждую ошибку (`chmod` — invalid mode, missing operand, cannot
+  access, invalid option; `chown` — invalid user, invalid group).
 
 Запуск с переопределённым `$HOME` устроен как `uv run env HOME=... repl ...`
 (а не `HOME=... uv run repl ...`), потому что сам `uv` использует `$HOME` для
@@ -249,11 +290,11 @@ GNU `%6d\t%s`. Без аргументов — `cat: missing file operand` (у �
 uv run pytest -q
 ```
 
-Тесты ядра (`test_parser.py`, `test_commands.py`, `test_shell.py`,
-`test_config.py`, `test_script.py`, `test_vfs.py`, `test_vfs_loader.py`)
-запускаются без дисплея. GUI smoke-тест (`test_gui_smoke.py`) требует PyQt6
-и офскрин-платформу Qt (пропускается автоматически, если PyQt6 не
-установлен):
+Тесты ядра (`test_parser.py`, `test_commands.py`, `test_modes.py`,
+`test_shell.py`, `test_config.py`, `test_script.py`, `test_vfs.py`,
+`test_vfs_loader.py`) запускаются без дисплея. GUI smoke-тест
+(`test_gui_smoke.py`) требует PyQt6 и офскрин-платформу Qt (пропускается
+автоматически, если PyQt6 не установлен):
 
 ```bash
 QT_QPA_PLATFORM=offscreen uv run pytest -q
@@ -270,7 +311,8 @@ src/repl/
 │   ├── errors.py
 │   ├── sysinfo.py
 │   ├── parser.py        # + комментарии `#`
-│   ├── commands.py      # Command.run(args, ctx); ls/cd/cat/tac, exit, vfs-info
+│   ├── commands.py      # Command.run(args, ctx); ls/cd/cat/tac/chmod/chown, exit, vfs-info
+│   ├── modes.py         # parse_mode(spec, current_mode); ModeError
 │   ├── shell.py         # Shell(vfs=...), CommandContext, cwd/oldpwd
 │   ├── config.py        # AppConfig, parse_args, format_config
 │   ├── script.py        # load_script, iter_script, abort_message
@@ -293,6 +335,7 @@ scripts/
 ├── vfs_errors.sh
 ├── stage3_errors.sh
 ├── stage4.sh
+├── stage5.sh
 └── startup/
     ├── basic.repl
     ├── with_error.repl
@@ -309,7 +352,14 @@ scripts/
     ├── stage4_err_cd_missing_path.repl
     ├── stage4_err_cat_directory.repl
     ├── stage4_err_cat_missing_file.repl
-    └── stage4_err_tac_missing_operand.repl
+    ├── stage4_err_tac_missing_operand.repl
+    ├── stage5.repl
+    ├── stage5_err_chmod_invalid_mode.repl
+    ├── stage5_err_chmod_missing_operand.repl
+    ├── stage5_err_chmod_missing_file.repl
+    ├── stage5_err_chown_invalid_user.repl
+    ├── stage5_err_chown_invalid_group.repl
+    └── stage5_err_chmod_invalid_option.repl
 vfs/
 ├── minimal.xml
 ├── multi.xml
@@ -323,6 +373,7 @@ vfs/
 tests/
 ├── test_parser.py
 ├── test_commands.py
+├── test_modes.py
 ├── test_shell.py
 ├── test_config.py
 ├── test_script.py

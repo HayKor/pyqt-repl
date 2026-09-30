@@ -1,0 +1,5 @@
+# stage5_err_chown_invalid_group.repl -- an invalid GROUP name aborts the
+# script.
+
+chown alice /home/user/docs/notes.txt
+chown alice:BAD! /home/user/docs/notes.txt

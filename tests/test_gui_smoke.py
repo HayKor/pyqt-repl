@@ -193,3 +193,11 @@ def test_vfs_info_command_without_vfs_reports_error(qapp: QApplication) -> None:
     window.terminal.submit("vfs-info")
     text = window.terminal.output_text()
     assert "vfs-info: no VFS loaded" in text
+
+
+def test_chmod_then_ls_l_shows_the_new_mode(qapp: QApplication) -> None:
+    window = MainWindow(config=AppConfig(vfs_path=_VFS_DIR / "deep.xml"))
+    window.terminal.submit("chmod 700 /home/user/docs/notes.txt")
+    window.terminal.submit("ls -l /home/user/docs/notes.txt")
+    text = window.terminal.output_text()
+    assert "-rwx------ user user  " in text

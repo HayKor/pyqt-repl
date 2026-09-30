@@ -1,0 +1,5 @@
+# stage5_err_chmod_invalid_mode.repl -- an unparsable MODE aborts the
+# script.
+
+chmod 755 /home/user/docs/notes.txt
+chmod xyz /home/user/docs/notes.txt
