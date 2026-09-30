@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<vfs name="multi">
+  <file name="readme.txt">Welcome to the multi VFS.
+It has a few plain files in the root directory.
+</file>
+  <file name=".hidden">a hidden dotfile</file>
+  <file name="logo.bin" encoding="base64">iVBORw0KGgo=</file>
+</vfs>

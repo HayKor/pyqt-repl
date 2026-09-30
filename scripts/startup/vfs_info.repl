@@ -1,0 +1,5 @@
+# vfs_info.repl -- show VFS info and list the root directory.
+# No `exit` at the end: the window stays open, as with stage-2 scripts.
+
+vfs-info
+ls -l

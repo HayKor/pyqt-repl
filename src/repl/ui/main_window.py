@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget
 
 from ..core.config import AppConfig, format_config
-from ..core.errors import ScriptError
+from ..core.errors import ScriptError, VFSLoadError
 from ..core.script import abort_message, iter_script, load_script
 from ..core.shell import ExecResult, Shell
 from ..core.sysinfo import hostname, username, window_title
+from ..core.vfs_loader import describe, load_vfs
 from .terminal import TerminalWidget
 
 
@@ -34,12 +37,30 @@ class MainWindow(QMainWindow):
         for debug_line in format_config(self.config):
             self.terminal.append_output(debug_line)
 
+        if self.config.vfs_path is not None:
+            self._load_vfs(self.config.vfs_path)
+
         if self.config.script_path is not None:
             QTimer.singleShot(0, self.run_startup_script)
 
     @staticmethod
     def _prompt() -> str:
         return f"{username()}@{hostname()}:~$ "
+
+    def _load_vfs(self, path: Path) -> None:
+        """Load ``path`` into ``self.shell.vfs``, reporting the outcome.
+
+        On success prints ``describe(vfs)``; on ``VFSLoadError`` prints the
+        message in red and leaves ``self.shell.vfs`` as the empty VFS it
+        already was.
+        """
+        try:
+            vfs = load_vfs(path)
+        except VFSLoadError as exc:
+            self.terminal.append_error(str(exc))
+            return
+        self.shell.vfs = vfs
+        self.terminal.append_output(describe(vfs))
 
     def _on_command(self, line: str) -> None:
         result = self.shell.execute(line)

@@ -1,0 +1,5 @@
+# stage3_err_ls.repl -- an invalid ls option aborts the script.
+
+ls -l $HOME
+vfs-info
+ls -z
