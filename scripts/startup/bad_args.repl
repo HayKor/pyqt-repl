@@ -1,5 +1,6 @@
-# bad_args.repl -- a command-argument error aborts the script.
+# bad_args.repl -- a command-argument error aborts the script. Uses only
+# "/" so the first line succeeds even with no VFS loaded.
 
-ls -l $HOME
+ls -l /
 ls -z
 ls -l /never/reached

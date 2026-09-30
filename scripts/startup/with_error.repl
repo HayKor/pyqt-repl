@@ -1,6 +1,7 @@
-# with_error.repl -- a script that aborts partway through.
+# with_error.repl -- a script that aborts partway through. Uses only "/"
+# so the first two lines succeed even with no VFS loaded.
 
-ls -l $HOME
-cd /tmp   # inline comment
+ls -l /
+cd /   # inline comment
 foo bar
 ls -l /never/reached

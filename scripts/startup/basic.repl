@@ -1,5 +1,7 @@
-# basic.repl -- comments (whole-line and trailing) plus $HOME and quoting.
+# basic.repl -- comments (whole-line and trailing), $HOME expansion and
+# quoting, now exercised through real ls/cd over the VFS (run with
+# --vfs vfs/deep.xml and HOME=/home/user, see scripts/run_script.sh).
 ls -l $HOME
-cd "${HOME}/projects"   # trailing comment after a real command
-cd '$HOME'
+cd "${HOME}/docs"   # trailing comment after a real command
+cd ..
 ls -la

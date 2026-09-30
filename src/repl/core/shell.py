@@ -37,6 +37,7 @@ class Shell:
         self.commands = commands
         self.vfs = vfs if vfs is not None else VFS.empty()
         self.cwd = "/"
+        self.oldpwd: str | None = None
         self.last_exit_code = 0
 
     def _env_with_status(self) -> dict[str, str]:
@@ -63,6 +64,7 @@ class Shell:
             cwd=self.cwd,
             last_exit_code=self.last_exit_code,
             env=self.env,
+            oldpwd=self.oldpwd,
         )
         try:
             result = command.run(argv[1:], ctx)
@@ -70,6 +72,7 @@ class Shell:
             self.last_exit_code = 2
             return ExecResult(stderr=str(exc), exit_code=2)
         self.cwd = ctx.cwd
+        self.oldpwd = ctx.oldpwd
 
         self.last_exit_code = result.exit_code
         return ExecResult(
