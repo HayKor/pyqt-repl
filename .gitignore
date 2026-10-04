@@ -8,3 +8,15 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+
+# Editors
+.idea/
+.vscode/
+*.swp
+
+# Assignment PDFs (kept locally)
+docs/*.pdf
