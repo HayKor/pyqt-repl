@@ -1,3 +1,5 @@
+"""Loading the VFS from an XML image."""
+
 import base64
 import binascii
 import hashlib
@@ -24,14 +26,19 @@ _MODE_RE = re.compile(r"^0?[0-7]{3}$")
 
 
 class _FormatError(Exception):
+    """XML doesn't match the VFS schema."""
+
     pass
 
 
 def load_vfs(path: Path) -> VFS:
+    """Load a VFS from an XML file; raises VFSLoadError."""
     try:
         raw = path.read_bytes()
     except FileNotFoundError:
-        raise VFSLoadError(f"repl: vfs: {path}: No such file or directory") from None
+        raise VFSLoadError(
+            f"repl: vfs: {path}: No such file or directory"
+        ) from None
     except IsADirectoryError:
         raise VFSLoadError(f"repl: vfs: {path}: Is a directory") from None
     except PermissionError:
@@ -52,11 +59,13 @@ def load_vfs(path: Path) -> VFS:
 
 
 def describe(vfs: VFS) -> str:
+    """One-line ``[vfs] loaded ...`` summary."""
     dirs, files = _count(vfs.root)
     return f"[vfs] loaded '{vfs.name}' ({dirs} dirs, {files} files)"
 
 
 def _count(node: VDir) -> tuple[int, int]:
+    """Count (dirs, files) below a directory, recursively."""
     dirs = 0
     files = 0
     for child in node.children.values():
@@ -81,7 +90,9 @@ def _parse_root(elem: ET.Element, path: Path) -> tuple[str, VDir]:
     owner = elem.get("owner", DEFAULT_OWNER)
     group = elem.get("group", DEFAULT_GROUP)
     children = _parse_children(elem, "/")
-    return name, VDir(name="", mode=mode, owner=owner, group=group, children=children)
+    return name, VDir(
+        name="", mode=mode, owner=owner, group=group, children=children
+    )
 
 
 def _parse_children(elem: ET.Element, dir_path: str) -> dict[str, VNode]:
@@ -107,7 +118,9 @@ def _parse_dir(elem: ET.Element, name: str, dir_path: str) -> VDir:
     owner = elem.get("owner", DEFAULT_OWNER)
     group = elem.get("group", DEFAULT_GROUP)
     children = _parse_children(elem, dir_path)
-    return VDir(name=name, mode=mode, owner=owner, group=group, children=children)
+    return VDir(
+        name=name, mode=mode, owner=owner, group=group, children=children
+    )
 
 
 def _parse_file(elem: ET.Element, name: str, file_path: str) -> VFile:
@@ -153,7 +166,9 @@ def _validate_name(name: str | None, kind: str) -> str:
 def _check_attrs(elem: ET.Element, valid: frozenset[str], context: str) -> None:
     unknown = set(elem.attrib) - valid
     if unknown:
-        raise _FormatError(f"unknown attribute {sorted(unknown)[0]!r} on {context}")
+        raise _FormatError(
+            f"unknown attribute {sorted(unknown)[0]!r} on {context}"
+        )
 
 
 def _check_no_text(elem: ET.Element, context: str) -> None:
