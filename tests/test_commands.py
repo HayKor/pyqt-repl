@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import hashlib
 from pathlib import Path
 
@@ -23,10 +21,7 @@ from repl.core.vfs_loader import load_vfs
 
 
 def make_vfs() -> VFS:
-    """A small tree exercising ls/cd/cat/tac: hidden files, an empty file
-    and directory, a large file (for ``-h``), and files without a trailing
-    newline (for ``cat``/``tac``).
-    """
+    # hidden files, empty file/dir, a big one for -h, some without trailing \n
     notes = VFile(name="notes.txt", mode=0o644, owner="user", group="user", data=b"ab\ncd\n")
     empty = VFile(name="empty.txt", mode=0o644, owner="user", group="user", data=b"")
     docs = VDir(
@@ -94,7 +89,7 @@ def make_ctx(
     )
 
 
-# -- ls ----------------------------------------------------------------
+# ls
 
 
 def test_ls_no_args_lists_cwd() -> None:
@@ -201,7 +196,7 @@ def test_ls_rejects_unknown_option_within_combo() -> None:
         LsCommand().run(["-lx"], make_ctx())
 
 
-# -- cd ------------------------------------------------------------------
+# cd
 
 
 def test_cd_no_args_goes_to_root() -> None:
@@ -262,7 +257,7 @@ def test_cd_too_many_arguments() -> None:
         CdCommand().run(["/tmp", "/home"], make_ctx())
 
 
-# -- exit ------------------------------------------------------------------
+# exit
 
 
 def test_exit_no_args_defaults_to_last_exit_code() -> None:
@@ -293,7 +288,7 @@ def test_exit_too_many_arguments() -> None:
         ExitCommand().run(["1", "2"], make_ctx())
 
 
-# -- cat -------------------------------------------------------------------
+# cat
 
 
 def test_cat_concatenates_files_in_argument_order() -> None:
@@ -336,7 +331,7 @@ def test_cat_invalid_option() -> None:
         CatCommand().run(["-x", "/var/logs/one.log"], make_ctx())
 
 
-# -- tac ---------------------------------------------------------------
+# tac
 
 
 def test_tac_reverses_lines_within_a_file() -> None:
@@ -345,8 +340,7 @@ def test_tac_reverses_lines_within_a_file() -> None:
 
 
 def test_tac_glues_last_unterminated_line_gnu_style() -> None:
-    # Matches GNU: `printf 'a\nb' | tac` -> "ba\n" (before this project's
-    # blanket "no trailing newline in command output" convention strips it).
+    # GNU gives "ba\n" here, we just drop the trailing \n as usual
     result = TacCommand().run(["/var/logs/ab.txt"], make_ctx())
     assert result.output == "ba"
 
@@ -380,7 +374,7 @@ def test_tac_invalid_option() -> None:
         TacCommand().run(["-x", "/var/logs/one.log"], make_ctx())
 
 
-# -- chmod --------------------------------------------------------------
+# chmod
 
 
 def test_chmod_octal_sets_absolute_mode() -> None:
@@ -456,7 +450,7 @@ def test_chmod_malformed_dash_mode_is_invalid_mode_not_option() -> None:
     assert result.exit_code == 1
 
 
-# -- chown --------------------------------------------------------------
+# chown
 
 
 def test_chown_user_only_changes_owner_leaves_group() -> None:
@@ -553,7 +547,7 @@ def test_chown_rejects_unknown_option() -> None:
         ChownCommand().run(["-z", "alice", "/home/user/docs/notes.txt"], make_ctx())
 
 
-# -- chmod/chown never touch the VFS's XML source on disk ------------------
+# chmod/chown don't write anything back to the xml
 
 
 def test_chmod_and_chown_do_not_modify_the_vfs_source_file() -> None:
@@ -568,12 +562,11 @@ def test_chmod_and_chown_do_not_modify_the_vfs_source_file() -> None:
 
     after = hashlib.sha256(path.read_bytes()).hexdigest()
     assert after == before
-    # vfs-info keeps reporting the source file's hash, unaffected by the
-    # in-memory edits above.
+    # hash is still the original file's
     assert shell.vfs.sha256 == before
 
 
-# -- vfs-info ----------------------------------------------------------
+# vfs-info
 
 
 def test_vfs_info_not_loaded() -> None:

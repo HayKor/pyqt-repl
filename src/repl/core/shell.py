@@ -1,11 +1,3 @@
-"""The shell core: ties the parser, the command registry and the VFS together.
-
-Contains no Qt imports so it can be exercised by plain pytest and reused
-by any future front-end (GUI now, a start-up script or a VFS later).
-"""
-
-from __future__ import annotations
-
 from collections.abc import Mapping
 from dataclasses import dataclass
 import os
@@ -25,8 +17,6 @@ class ExecResult:
 
 
 class Shell:
-    """Executes one command line at a time, keeping track of ``$?``."""
-
     def __init__(
         self,
         env: Mapping[str, str] | None = None,
@@ -44,7 +34,7 @@ class Shell:
         return {**self.env, "?": str(self.last_exit_code)}
 
     def execute(self, line: str) -> ExecResult:
-        """Parse and run ``line``. Never raises ``ShellError``."""
+        # never raises, errors go to stderr
         try:
             argv = tokenize(line, env=self._env_with_status())
         except ParseError as exc:
