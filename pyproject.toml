@@ -1,7 +1,7 @@
 [project]
 name = "qt-repl"
 version = "0.1.0"
-description = "Add your description here"
+description = "Учебный эмулятор командной оболочки UNIX с GUI на PyQt6 и виртуальной ФС"
 readme = "README.md"
 authors = [
     { name = "Arthur", email = "baginian.artur@yandex.com" }
@@ -24,4 +24,24 @@ module-name = "repl"
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    "ruff>=0.16.10",
 ]
+
+[tool.ruff]
+line-length = 80
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+preview = true
+select = ["E", "F", "W", "C901", "N", "D", "PLR0913", "PLR0917", "PLR2004"]
+ignore = ["D203", "D213"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pylint]
+max-args = 7
+max-positional-args = 7
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D102", "D103"]
