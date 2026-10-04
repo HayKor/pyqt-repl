@@ -1,3 +1,5 @@
+"""Tests for VFS path normalization and resolution."""
+
 import pytest
 
 from repl.core.errors import VFSPathError
@@ -5,11 +7,33 @@ from repl.core.vfs import VDir, VFile, VFS
 
 
 def make_vfs() -> VFS:
-    notes = VFile(name="notes.txt", mode=0o644, owner="user", group="user", data=b"hi\n")
-    docs = VDir(name="docs", mode=0o755, owner="user", group="user", children={"notes.txt": notes})
-    user = VDir(name="user", mode=0o755, owner="user", group="user", children={"docs": docs})
-    home = VDir(name="home", mode=0o755, owner="root", group="root", children={"user": user})
-    root = VDir(name="", mode=0o755, owner="root", group="root", children={"home": home})
+    notes = VFile(
+        name="notes.txt", mode=0o644, owner="user", group="user", data=b"hi\n"
+    )
+    docs = VDir(
+        name="docs",
+        mode=0o755,
+        owner="user",
+        group="user",
+        children={"notes.txt": notes},
+    )
+    user = VDir(
+        name="user",
+        mode=0o755,
+        owner="user",
+        group="user",
+        children={"docs": docs},
+    )
+    home = VDir(
+        name="home",
+        mode=0o755,
+        owner="root",
+        group="root",
+        children={"user": user},
+    )
+    root = VDir(
+        name="", mode=0o755, owner="root", group="root", children={"home": home}
+    )
     return VFS(name="test", sha256="deadbeef", root=root)
 
 
@@ -29,6 +53,8 @@ def test_loaded_flag_set_once_source_present(tmp_path) -> None:
 
 
 class TestNormalize:
+    """VFS.normalize: absolute paths, ``.``/``..``, slashes."""
+
     def test_root(self) -> None:
         vfs = make_vfs()
         assert vfs.normalize("/") == "/"
@@ -59,6 +85,8 @@ class TestNormalize:
 
 
 class TestResolve:
+    """VFS.resolve: lookups and path errors."""
+
     def test_resolve_root(self) -> None:
         vfs = make_vfs()
         assert vfs.resolve("/") is vfs.root
@@ -84,13 +112,18 @@ class TestResolve:
         vfs = make_vfs()
         with pytest.raises(VFSPathError) as exc_info:
             vfs.resolve("/home/user/docs/notes.txt/more")
-        assert str(exc_info.value) == "/home/user/docs/notes.txt/more: Not a directory"
+        assert (
+            str(exc_info.value)
+            == "/home/user/docs/notes.txt/more: Not a directory"
+        )
 
     def test_trailing_slash_on_a_file(self) -> None:
         vfs = make_vfs()
         with pytest.raises(VFSPathError) as exc_info:
             vfs.resolve("/home/user/docs/notes.txt/")
-        assert str(exc_info.value) == "/home/user/docs/notes.txt/: Not a directory"
+        assert (
+            str(exc_info.value) == "/home/user/docs/notes.txt/: Not a directory"
+        )
 
     def test_trailing_slash_on_a_directory_is_fine(self) -> None:
         vfs = make_vfs()

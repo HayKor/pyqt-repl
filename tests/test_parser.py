@@ -1,3 +1,5 @@
+"""Tests for the command-line tokenizer."""
+
 import pytest
 
 from repl.core.errors import ParseError
