@@ -1,9 +1,3 @@
-"""GUI smoke test: run offscreen (QT_QPA_PLATFORM=offscreen), skipped if PyQt6
-is not installed.
-"""
-
-from __future__ import annotations
-
 import os
 
 import pytest
