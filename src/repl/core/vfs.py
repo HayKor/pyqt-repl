@@ -11,8 +11,6 @@ DEFAULT_GROUP = "root"
 
 @dataclass
 class VNode:
-    """Common metadata shared by every VFS node."""
-
     name: str
     mode: int
     owner: str
@@ -21,8 +19,6 @@ class VNode:
 
 @dataclass
 class VFile(VNode):
-    """A regular file: its content lives entirely in ``data``."""
-
     data: bytes = b""
 
     @property
@@ -32,15 +28,11 @@ class VFile(VNode):
 
 @dataclass
 class VDir(VNode):
-    """A directory: a name -> node mapping of its direct children."""
-
     children: dict[str, VNode] = field(default_factory=dict)
 
 
 @dataclass
 class VFS:
-    """A loaded (or empty) virtual file system."""
-
     name: str
     sha256: str
     root: VDir
@@ -48,23 +40,16 @@ class VFS:
 
     @property
     def loaded(self) -> bool:
-        """True once a real XML image backs this VFS (``source`` is set)."""
         return self.source is not None
 
     @classmethod
     def empty(cls) -> VFS:
-        """The default VFS used before ``--vfs`` is loaded: just ``/``."""
+        # just "/", used when there's no --vfs
         root = VDir(name="", mode=DEFAULT_DIR_MODE, owner=DEFAULT_OWNER, group=DEFAULT_GROUP)
         return cls(name="<none>", sha256="", root=root, source=None)
 
     def normalize(self, path: str, cwd: str = "/") -> str:
-        """Return the absolute, canonical form of ``path``.
-
-        ``path`` is resolved relative to ``cwd`` unless it is itself
-        absolute (starts with ``/``). ``.`` components are dropped, ``..``
-        pops the last component (staying at ``/`` if already there), and
-        repeated/trailing slashes collapse away.
-        """
+        # no os.path here on purpose, it's the real fs's rules not ours
         if path.startswith("/"):
             parts: list[str] = []
         else:
@@ -82,14 +67,7 @@ class VFS:
         return "/" + "/".join(parts)
 
     def resolve(self, path: str, cwd: str = "/") -> VNode:
-        """Resolve ``path`` (relative to ``cwd``) to the node it names.
-
-        Raises ``VFSPathError`` with ``path`` as given (not normalized) and
-        a bash-styled reason: ``"No such file or directory"`` when a
-        component is missing, or ``"Not a directory"`` when a non-final
-        component (or a trailing-slash path, e.g. ``"file/"``) names a
-        file instead of a directory.
-        """
+        # errors show the path as typed, like bash
         normalized = self.normalize(path, cwd)
         trailing_slash = normalized != "/" and path.rstrip() != "" and path.rstrip().endswith("/")
 
@@ -103,6 +81,7 @@ class VFS:
                     raise VFSPathError(path, "No such file or directory")
                 node = child
 
+        # "file/" is an error too
         if trailing_slash and isinstance(node, VFile):
             raise VFSPathError(path, "Not a directory")
         return node

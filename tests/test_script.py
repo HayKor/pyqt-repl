@@ -67,8 +67,7 @@ def test_status_variable_carries_between_script_lines() -> None:
     lines = ["ls -l $HOME", 'cd "/$?"']
     steps = list(iter_script(shell, lines))
     assert len(steps) == 2
-    # $? expanded to "0" after the successful `ls`, so "/$?" became "/0",
-    # a real directory -- proving the substitution happened.
+    # $? -> "0" so cd "/$?" landed in /0
     assert steps[1].result.exit_code == 0
     assert shell.cwd == "/0"
 

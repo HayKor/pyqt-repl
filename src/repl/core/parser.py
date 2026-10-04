@@ -8,10 +8,7 @@ _NAME_CONT = _NAME_START | frozenset("0123456789")
 
 
 def _expand_var(line: str, dollar_index: int, env: Mapping[str, str]) -> tuple[str, int]:
-    """Expand the variable reference starting at ``line[dollar_index] == '$'``.
-
-    Returns ``(expanded_text, next_index)``.
-    """
+    # -> (value, index right after the var)
     n = len(line)
     j = dollar_index + 1
 
@@ -35,12 +32,11 @@ def _expand_var(line: str, dollar_index: int, env: Mapping[str, str]) -> tuple[s
         name = line[j:k]
         return env.get(name, ""), k
 
-    # No valid name follows: '$' is a literal character.
+    # lone $ stays as is
     return "$", j
 
 
 def tokenize(line: str, env: Mapping[str, str] | None = None) -> list[str]:
-    """Split ``line`` into argv-style words, expanding variables in ``env``."""
     if env is None:
         env = os.environ
 
@@ -55,7 +51,7 @@ def tokenize(line: str, env: Mapping[str, str] | None = None) -> list[str]:
             break
 
         if line[i] == "#":
-            # Unquoted '#' at the start of a word: comment to end of line.
+            # comment, ignore the rest
             break
 
         parts: list[str] = []

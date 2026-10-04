@@ -2,7 +2,7 @@ import pytest
 
 from repl.core.modes import ModeError, looks_like_symbolic_mode, parse_mode
 
-# -- octal ---------------------------------------------------------------
+# octal
 
 
 def test_octal_replaces_bits_wholesale() -> None:
@@ -32,7 +32,7 @@ def test_octal_rejects_bad_digit() -> None:
         parse_mode("789", 0o644)
 
 
-# -- symbolic: single clause ---------------------------------------------
+# symbolic: single clause
 
 
 def test_symbolic_add_bit_for_owner() -> None:
@@ -56,11 +56,11 @@ def test_symbolic_assign_empty_perms_clears_role() -> None:
 
 
 def test_symbolic_assign_only_touches_named_role() -> None:
-    # "u=rwx" must not disturb group/other bits.
+    # group/other stay as they were
     assert parse_mode("u=rwx", 0o022) == 0o722
 
 
-# -- symbolic: comma lists and multi-op clauses ---------------------------
+# symbolic: comma lists and multi-op clauses
 
 
 def test_symbolic_comma_list() -> None:
@@ -75,7 +75,7 @@ def test_symbolic_minus_x_removes_execute_for_everyone() -> None:
     assert parse_mode("-x", 0o755) == 0o644
 
 
-# -- symbolic: rejected forms ----------------------------------------------
+# symbolic: rejected forms
 
 
 def test_symbolic_rejects_capital_x() -> None:
@@ -113,7 +113,7 @@ def test_rejects_trailing_comma() -> None:
         parse_mode("u+x,", 0o644)
 
 
-# -- looks_like_symbolic_mode ----------------------------------------------
+# looks_like_symbolic_mode
 
 
 def test_looks_like_symbolic_mode_true_for_dash_x() -> None:

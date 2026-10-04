@@ -17,8 +17,6 @@ class ExecResult:
 
 
 class Shell:
-    """Executes one command line at a time, keeping track of ``$?``."""
-
     def __init__(
         self,
         env: Mapping[str, str] | None = None,
@@ -36,7 +34,7 @@ class Shell:
         return {**self.env, "?": str(self.last_exit_code)}
 
     def execute(self, line: str) -> ExecResult:
-        """Parse and run ``line``. Never raises ``ShellError``."""
+        # never raises, errors go to stderr
         try:
             argv = tokenize(line, env=self._env_with_status())
         except ParseError as exc:

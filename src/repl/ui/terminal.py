@@ -9,7 +9,7 @@ _ERROR_COLOR = "#ff6b68"
 
 
 class _HistoryLineEdit(QLineEdit):
-    """A ``QLineEdit`` that recalls previously submitted lines via Up/Down."""
+    """input line with up/down history"""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -39,8 +39,6 @@ class _HistoryLineEdit(QLineEdit):
 
 
 class TerminalWidget(QWidget):
-    """Output ribbon + prompt + input line, emitting submitted commands."""
-
     command_entered = pyqtSignal(str)
 
     def __init__(self, prompt: str, parent: QWidget | None = None) -> None:
@@ -90,16 +88,12 @@ class TerminalWidget(QWidget):
             self._scroll_to_bottom()
 
     def submit(self, line: str) -> None:
-        """Submit ``line`` programmatically, as if Enter had been pressed."""
+        # same as typing it + Enter (for tests)
         self._input.setText(line)
         self._on_return_pressed()
 
     def echo_command(self, line: str) -> None:
-        """Print ``prompt + line`` to the output ribbon, without executing it.
-
-        Used both for interactively entered lines and for each line of a
-        startup script, so the two modes look identical.
-        """
+        # script lines go through here too so they look the same
         self._append_plain(f"{self._prompt}{line}")
 
     def _on_return_pressed(self) -> None:
