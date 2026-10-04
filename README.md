@@ -1,7 +1,20 @@
 # PyQt GUI REPL w/ VFS
 
 Учебный проект: эмулятор командной оболочки UNIX-подобной ОС с графическим
-интерфейсом (PyQt6).
+интерфейсом (PyQt6). Окно ведёт себя как терминал: приглашение
+`user@host:<cwd>$`, ввод команд с историей (стрелки вверх/вниз), вывод и
+ошибки в общей ленте. Файловая система виртуальная: загружается из XML-образа
+и живёт только в памяти, поэтому реальные файлы эмулятор не трогает.
+
+Описание функций и настроек:
+
+- [Параметры запуска](#параметры-запуска): `--vfs`, `--script`;
+- [Стартовый скрипт](#стартовый-скрипт): формат и поведение при ошибках;
+- [Виртуальная файловая система](#виртуальная-файловая-система): формат XML
+  и `vfs-info`;
+- [Команды](#команды): `ls`, `cd`, `cat`, `tac`, `chmod`, `chown`, `exit`,
+  `vfs-info`;
+- [Скрипты ОС](#скрипты-ос): готовые сценарии запуска.
 
 ## Архитектура
 
@@ -27,15 +40,27 @@ GUI (`src/repl/ui/`) — это тонкий слой поверх ядра: `Te
 ленту вывода и строку ввода, `MainWindow` передаёт введённую строку в
 `Shell.execute` и печатает результат.
 
-## Запуск
+## Сборка и запуск
 
-Требуется Python 3.14 и [`uv`](https://docs.astral.sh/uv/).
+Требуется Python 3.14 и [`uv`](https://docs.astral.sh/uv/). Основные действия
+доступны через `Makefile`:
+
+| Команда | Что делает |
+|---------|------------|
+| `make install` | `uv sync`: создаёт `.venv` и ставит зависимости |
+| `make run ARGS="..."` | запускает эмулятор через `./run.sh` |
+| `make test` | `QT_QPA_PLATFORM=offscreen uv run pytest -q` |
+| `make lint` | `uv run ruff check`: стиль, docstrings, сложность |
+| `make build` | `uv build`: собирает wheel и sdist в `dist/` |
+| `make clean` | удаляет `dist/`, кеши и `__pycache__` |
+
+Без `make`:
 
 ```bash
 uv sync
-uv run repl
-# или
+./run.sh            # то же, что uv run repl
 uv run python -m repl
+uv build
 ```
 
 ## Параметры запуска
@@ -284,25 +309,69 @@ or directory`/`Not a directory` — код 1, остальные файлы об
 интерактивном режиме, поэтому такой вызов нужно прерывать вручную (например,
 `timeout`).
 
-## Тесты
+## Тесты и проверка стиля
 
 ```bash
 uv run pytest -q
+uv run ruff check
 ```
+
+`tests/conftest.py` включает офскрин-платформу Qt
+(`QT_QPA_PLATFORM=offscreen`), так что отдельный дисплей не нужен.
 
 Тесты ядра (`test_parser.py`, `test_commands.py`, `test_modes.py`,
 `test_shell.py`, `test_config.py`, `test_script.py`, `test_vfs.py`,
 `test_vfs_loader.py`) запускаются без дисплея. GUI smoke-тест
 (`test_gui_smoke.py`) требует PyQt6 и офскрин-платформу Qt (пропускается
-автоматически, если PyQt6 не установлен):
+автоматически, если PyQt6 не установлен).
+
+Настройки `ruff` лежат в `pyproject.toml`: строки до 80 символов,
+цикломатическая сложность ≤ 10, не больше 7 аргументов у функции, docstrings
+у модулей, классов и публичных функций, без «магических» чисел в сравнениях,
+имена по PEP 8.
+
+## Примеры использования
 
 ```bash
-QT_QPA_PLATFORM=offscreen uv run pytest -q
+./run.sh                                     # пустая VFS, интерактивный режим
+./run.sh --vfs vfs/deep.xml                  # загрузить VFS из XML
+./run.sh --vfs vfs/deep.xml --script scripts/startup/stage4.repl
+make run ARGS="--vfs vfs/multi.xml"
+./run.sh --help
 ```
+
+Пример сеанса на `vfs/deep.xml` (с `HOME=/home/user`):
+
+```
+[vfs] loaded 'deep' (11 dirs, 7 files)
+user@host:/$ ls
+etc  home  tmp  usr  var
+user@host:/$ cd ~/docs
+user@host:/home/user/docs$ ls -l
+total 2
+-rw-r--r-- user user   0 empty.txt
+-rw-r--r-- user user  64 notes.txt
+user@host:/home/user/docs$ cat -n notes.txt
+     1	First line of notes.
+     2	Second line of notes.
+     3	Third and last line.
+user@host:/home/user/docs$ chmod u+x,go-r notes.txt
+user@host:/home/user/docs$ ls -l notes.txt
+-rwx------ user user  64 notes.txt
+user@host:/home/user/docs$ cd /nope
+cd: /nope: No such file or directory
+```
+
+Больше сценариев (включая ошибочные) — в `scripts/*.sh` и
+`scripts/startup/*.repl`, см. «Скрипты ОС».
 
 ## Структура проекта
 
 ```
+run.sh                  # запуск эмулятора: uv run repl "$@"
+Makefile                # install / run / test / lint / build / clean
+pyproject.toml          # зависимости, точка входа repl, настройки ruff
+docs/plans/             # планы этапов
 src/repl/
 ├── __init__.py         # main(): parse_args() → sys.exit(app.run(cfg))
 ├── __main__.py         # python -m repl
@@ -371,6 +440,7 @@ vfs/
     ├── duplicate.xml
     └── bad_mode.xml
 tests/
+├── conftest.py
 ├── test_parser.py
 ├── test_commands.py
 ├── test_modes.py
