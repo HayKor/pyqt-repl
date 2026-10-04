@@ -1,3 +1,5 @@
+"""In-memory virtual file system model and path resolution."""
+
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -11,6 +13,8 @@ DEFAULT_GROUP = "root"
 
 @dataclass
 class VNode:
+    """Common metadata of a VFS node; ``mode`` holds only permission bits."""
+
     name: str
     mode: int
     owner: str
@@ -19,20 +23,27 @@ class VNode:
 
 @dataclass
 class VFile(VNode):
+    """File with its content as bytes."""
+
     data: bytes = b""
 
     @property
     def size(self) -> int:
+        """Size of the content in bytes."""
         return len(self.data)
 
 
 @dataclass
 class VDir(VNode):
+    """Directory; children are keyed by name."""
+
     children: dict[str, VNode] = field(default_factory=dict)
 
 
 @dataclass
 class VFS:
+    """Whole in-memory file system plus where it came from."""
+
     name: str
     sha256: str
     root: VDir
@@ -40,16 +51,25 @@ class VFS:
 
     @property
     def loaded(self) -> bool:
+        """True if the VFS was loaded from a file (``--vfs``)."""
         return self.source is not None
 
     @classmethod
     def empty(cls) -> VFS:
-        # just "/", used when there's no --vfs
-        root = VDir(name="", mode=DEFAULT_DIR_MODE, owner=DEFAULT_OWNER, group=DEFAULT_GROUP)
+        """Return a VFS with just "/", used when there is no ``--vfs``."""
+        root = VDir(
+            name="",
+            mode=DEFAULT_DIR_MODE,
+            owner=DEFAULT_OWNER,
+            group=DEFAULT_GROUP,
+        )
         return cls(name="<none>", sha256="", root=root, source=None)
 
     def normalize(self, path: str, cwd: str = "/") -> str:
-        # no os.path here on purpose, it's the real fs's rules not ours
+        """Make an absolute path out of ``path`` relative to ``cwd``.
+
+        No os.path on purpose: those are the real file system's rules.
+        """
         if path.startswith("/"):
             parts: list[str] = []
         else:
@@ -67,9 +87,16 @@ class VFS:
         return "/" + "/".join(parts)
 
     def resolve(self, path: str, cwd: str = "/") -> VNode:
-        # errors show the path as typed, like bash
+        """Find the node for ``path``; raises VFSPathError.
+
+        Errors show the path as typed, like bash.
+        """
         normalized = self.normalize(path, cwd)
-        trailing_slash = normalized != "/" and path.rstrip() != "" and path.rstrip().endswith("/")
+        trailing_slash = (
+            normalized != "/"
+            and path.rstrip() != ""
+            and path.rstrip().endswith("/")
+        )
 
         node: VNode = self.root
         if normalized != "/":

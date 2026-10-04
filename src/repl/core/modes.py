@@ -1,3 +1,5 @@
+"""Parsing of chmod MODE: octal and symbolic forms."""
+
 import re
 
 _OCTAL_RE = re.compile(r"0?[0-7]{3}")
@@ -15,17 +17,36 @@ _ROLE_PERM_BIT = {
 
 
 class ModeError(Exception):
+    """Invalid chmod MODE."""
+
     pass
 
 
 def parse_mode(spec: str, current_mode: int) -> int:
-    # octal just replaces everything, symbolic works on top of current_mode
+    """Apply chmod MODE to ``current_mode`` and return the new mode.
+
+    Octal replaces everything, symbolic works on top of ``current_mode``.
+    Raises ModeError if the spec is invalid.
+    """
     if _OCTAL_RE.fullmatch(spec):
         return int(spec, 8)
     return _parse_symbolic(spec, current_mode)
 
 
+def _apply_op(mode: int, op: str, role: str, perms: str) -> int:
+    """Apply one ``+``/``-``/``=`` with ``perms`` (``rwx``) to one role."""
+    bits = 0
+    for perm in perms:
+        bits |= _ROLE_PERM_BIT[role][perm]
+    if op == "+":
+        return mode | bits
+    if op == "-":
+        return mode & ~bits
+    return (mode & ~_ROLE_MASK[role]) | bits
+
+
 def _parse_symbolic(spec: str, current_mode: int) -> int:
+    """Apply a comma-separated symbolic MODE (``u+x,go-w``)."""
     mode = current_mode
     for clause in spec.split(","):
         match = _CLAUSE_RE.fullmatch(clause)
@@ -38,20 +59,12 @@ def _parse_symbolic(spec: str, current_mode: int) -> int:
         for op_group in _OP_RE.findall(match.group(2)):
             op, perms = op_group[0], op_group[1:]
             for role in roles:
-                bits = 0
-                for perm in perms:
-                    bits |= _ROLE_PERM_BIT[role][perm]
-                if op == "+":
-                    mode |= bits
-                elif op == "-":
-                    mode &= ~bits
-                else:  # "="
-                    mode = (mode & ~_ROLE_MASK[role]) | bits
+                mode = _apply_op(mode, op, role, perms)
     return mode & 0o777
 
 
 def looks_like_symbolic_mode(spec: str) -> bool:
-    # chmod needs this to tell "-x" (a mode) from a real option
+    """Tell a MODE like ``-x`` from a real option (for chmod)."""
     try:
         parse_mode(spec, 0)
     except ModeError:
