@@ -1,3 +1,6 @@
+"""Tests for loading the VFS from XML images."""
+
+import stat
 import hashlib
 from pathlib import Path
 
@@ -11,12 +14,20 @@ _VFS_DIR = Path(__file__).resolve().parent.parent / "vfs"
 _BROKEN_DIR = _VFS_DIR / "broken"
 
 
+def perms(mode: int) -> str:
+    """Render permission bits like ``ls -l`` does: ``rwxr-xr-x``."""
+    return stat.filemode(mode)[1:]
+
+
 def test_load_minimal() -> None:
     vfs = load_vfs(_VFS_DIR / "minimal.xml")
     assert vfs.name == "minimal"
     assert vfs.loaded is True
     assert vfs.root.children == {}
-    assert vfs.sha256 == hashlib.sha256((_VFS_DIR / "minimal.xml").read_bytes()).hexdigest()
+    assert (
+        vfs.sha256
+        == hashlib.sha256((_VFS_DIR / "minimal.xml").read_bytes()).hexdigest()
+    )
 
 
 def test_load_multi_structure() -> None:
@@ -26,9 +37,12 @@ def test_load_multi_structure() -> None:
 
     readme = vfs.root.children["readme.txt"]
     assert isinstance(readme, VFile)
-    assert readme.mode == 0o644  # default file mode
+    assert perms(readme.mode) == "rw-r--r--"  # default file mode
     assert readme.owner == "root"  # default owner
-    assert readme.data == b"Welcome to the multi VFS.\nIt has a few plain files in the root directory.\n"
+    assert (
+        readme.data == b"Welcome to the multi VFS.\n"
+        b"It has a few plain files in the root directory.\n"
+    )
 
     logo = vfs.root.children["logo.bin"]
     assert isinstance(logo, VFile)
@@ -43,27 +57,33 @@ def test_load_deep_structure_and_defaults() -> None:
 
     home = vfs.root.children["home"]
     assert isinstance(home, VDir)
-    assert home.mode == 0o755  # default dir mode
-    assert home.owner == "root"  # default owner (not inherited from root <vfs owner="root">)
+    assert perms(home.mode) == "rwxr-xr-x"  # default dir mode
+    assert (
+        home.owner == "root"
+    )  # default owner (not inherited from root <vfs owner="root">)
 
     user = home.children["user"]
     assert isinstance(user, VDir)
     assert user.owner == "user"
     assert user.group == "user"
 
+
+def test_load_deep_files_and_modes() -> None:
+    vfs = load_vfs(_VFS_DIR / "deep.xml")
+    user = vfs.root.children["home"].children["user"]
     notes = user.children["docs"].children["notes.txt"]
     assert isinstance(notes, VFile)
-    assert notes.mode == 0o644
+    assert perms(notes.mode) == "rw-r--r--"
     assert notes.owner == "user"
     assert notes.data.endswith(b"\n")
 
     tool = vfs.root.children["usr"].children["bin"].children["tool"]
     assert isinstance(tool, VFile)
-    assert tool.mode == 0o755
+    assert perms(tool.mode) == "rwxr-xr-x"
 
     tmp = vfs.root.children["tmp"]
     assert isinstance(tmp, VDir)
-    assert tmp.mode == 0o777
+    assert perms(tmp.mode) == "rwxrwxrwx"
     assert tmp.children == {}
 
 
@@ -107,7 +127,9 @@ def test_load_not_xml() -> None:
 
 
 def test_load_wrong_root_element() -> None:
-    with pytest.raises(VFSLoadError, match=r"invalid format: root element must be <vfs>"):
+    with pytest.raises(
+        VFSLoadError, match=r"invalid format: root element must be <vfs>"
+    ):
         load_vfs(_BROKEN_DIR / "wrong_root.xml")
 
 
