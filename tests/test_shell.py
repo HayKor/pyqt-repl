@@ -1,15 +1,46 @@
+"""Tests for Shell.execute: parsing, dispatch and exit codes."""
+
+from repl.core.errors import EXIT_NOT_FOUND, EXIT_USAGE
 from repl.core.shell import Shell
 from repl.core.vfs import VDir, VFile, VFS
 
+CUSTOM_EXIT = 7
+
 
 def make_vfs() -> VFS:
-    notes = VFile(name="notes.txt", mode=0o644, owner="user", group="user", data=b"hi\n")
-    docs = VDir(name="docs", mode=0o755, owner="user", group="user", children={"notes.txt": notes})
-    user = VDir(name="user", mode=0o755, owner="user", group="user", children={"docs": docs})
-    home = VDir(name="home", mode=0o755, owner="root", group="root", children={"user": user})
+    notes = VFile(
+        name="notes.txt", mode=0o644, owner="user", group="user", data=b"hi\n"
+    )
+    docs = VDir(
+        name="docs",
+        mode=0o755,
+        owner="user",
+        group="user",
+        children={"notes.txt": notes},
+    )
+    user = VDir(
+        name="user",
+        mode=0o755,
+        owner="user",
+        group="user",
+        children={"docs": docs},
+    )
+    home = VDir(
+        name="home",
+        mode=0o755,
+        owner="root",
+        group="root",
+        children={"user": user},
+    )
     # dir named "2" so cd "/$?" works after exit code 2
     two = VDir(name="2", mode=0o755, owner="root", group="root", children={})
-    root = VDir(name="", mode=0o755, owner="root", group="root", children={"home": home, "2": two})
+    root = VDir(
+        name="",
+        mode=0o755,
+        owner="root",
+        group="root",
+        children={"home": home, "2": two},
+    )
     return VFS(name="test", sha256="deadbeef", root=root)
 
 
@@ -40,8 +71,8 @@ def test_cd_too_many_arguments_from_plan_example() -> None:
     shell = make_shell()
     result = shell.execute("cd \"${HOME}/my dir\" '$HOME'")
     assert result.stderr == "cd: too many arguments"
-    assert result.exit_code == 2
-    assert shell.last_exit_code == 2
+    assert result.exit_code == EXIT_USAGE
+    assert shell.last_exit_code == EXIT_USAGE
 
 
 def test_cd_single_quoted_literal_does_not_expand() -> None:
@@ -56,30 +87,30 @@ def test_ls_invalid_option() -> None:
     shell = make_shell()
     result = shell.execute("ls -z")
     assert result.stderr == "ls: invalid option -- 'z'"
-    assert result.exit_code == 2
-    assert shell.last_exit_code == 2
+    assert result.exit_code == EXIT_USAGE
+    assert shell.last_exit_code == EXIT_USAGE
 
 
 def test_unknown_command() -> None:
     shell = make_shell()
     result = shell.execute("foo bar")
     assert result.stderr == "repl: foo: command not found"
-    assert result.exit_code == 127
-    assert shell.last_exit_code == 127
+    assert result.exit_code == EXIT_NOT_FOUND
+    assert shell.last_exit_code == EXIT_NOT_FOUND
 
 
 def test_unterminated_quote_syntax_error() -> None:
     shell = make_shell()
     result = shell.execute('echo "unterminated')
     assert result.stderr == "repl: syntax error: unterminated double quote"
-    assert result.exit_code == 2
+    assert result.exit_code == EXIT_USAGE
 
 
 def test_exit_non_numeric() -> None:
     shell = make_shell()
     result = shell.execute("exit abc")
     assert result.stderr == "exit: abc: numeric argument required"
-    assert result.exit_code == 2
+    assert result.exit_code == EXIT_USAGE
     assert result.should_exit is False
 
 
@@ -88,14 +119,14 @@ def test_exit_bare_uses_last_exit_code() -> None:
     shell.execute("ls -z")  # sets last_exit_code to 2
     result = shell.execute("exit")
     assert result.should_exit is True
-    assert result.exit_code == 2
+    assert result.exit_code == EXIT_USAGE
 
 
 def test_exit_with_explicit_code() -> None:
     shell = make_shell()
-    result = shell.execute("exit 7")
+    result = shell.execute(f"exit {CUSTOM_EXIT}")
     assert result.should_exit is True
-    assert result.exit_code == 7
+    assert result.exit_code == CUSTOM_EXIT
 
 
 def test_status_variable_expansion() -> None:
@@ -140,7 +171,12 @@ def test_vfs_info_no_vfs_loaded() -> None:
 def test_vfs_info_with_loaded_vfs() -> None:
     from pathlib import Path
 
-    vfs = VFS(name="demo", sha256="abc123", root=VFS.empty().root, source=Path("fs.xml"))
+    vfs = VFS(
+        name="demo",
+        sha256="abc123",
+        root=VFS.empty().root,
+        source=Path("fs.xml"),
+    )
     shell = Shell(env={"HOME": "/home/arthur"}, vfs=vfs)
     result = shell.execute("vfs-info")
     assert result.stdout == "name: demo\nsha256: abc123"
@@ -152,4 +188,4 @@ def test_vfs_info_too_many_arguments() -> None:
     shell = make_shell()
     result = shell.execute("vfs-info extra")
     assert result.stderr == "vfs-info: too many arguments"
-    assert result.exit_code == 2
+    assert result.exit_code == EXIT_USAGE

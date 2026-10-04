@@ -1,7 +1,10 @@
+"""Tests for CLI argument parsing and the debug config lines."""
+
 from pathlib import Path
 
 import pytest
 
+from repl.core.errors import EXIT_USAGE
 from repl.core.config import AppConfig, format_config, parse_args
 
 
@@ -35,13 +38,13 @@ def test_equals_sign_syntax() -> None:
 def test_unknown_flag_exits_with_code_2() -> None:
     with pytest.raises(SystemExit) as exc_info:
         parse_args(["--nope"])
-    assert exc_info.value.code == 2
+    assert exc_info.value.code == EXIT_USAGE
 
 
 def test_script_without_value_exits_with_code_2() -> None:
     with pytest.raises(SystemExit) as exc_info:
         parse_args(["--script"])
-    assert exc_info.value.code == 2
+    assert exc_info.value.code == EXIT_USAGE
 
 
 def test_help_exits_with_code_0() -> None:
