@@ -1,11 +1,3 @@
-"""Loading a VFS image from an XML file, once, entirely into memory.
-
-The XML is read as ``bytes`` a single time (used both for SHA-256 and for
-parsing); nothing derived from it is ever written back to disk.
-"""
-
-from __future__ import annotations
-
 import base64
 import binascii
 import hashlib
@@ -32,15 +24,10 @@ _MODE_RE = re.compile(r"^0?[0-7]{3}$")
 
 
 class _FormatError(Exception):
-    """Internal: one VFS-schema violation, wrapped as ``VFSLoadError`` by ``load_vfs``."""
+    pass
 
 
 def load_vfs(path: Path) -> VFS:
-    """Load and parse the VFS image at ``path``.
-
-    Raises ``VFSLoadError`` (bash-styled message) if the file cannot be
-    read, is not well-formed XML, or does not follow the VFS schema.
-    """
     try:
         raw = path.read_bytes()
     except FileNotFoundError:
@@ -65,7 +52,6 @@ def load_vfs(path: Path) -> VFS:
 
 
 def describe(vfs: VFS) -> str:
-    """Format the ``[vfs] loaded ...`` message printed at startup."""
     dirs, files = _count(vfs.root)
     return f"[vfs] loaded '{vfs.name}' ({dirs} dirs, {files} files)"
 

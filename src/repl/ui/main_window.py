@@ -1,7 +1,3 @@
-"""The application's main window: wires the terminal widget to the shell."""
-
-from __future__ import annotations
-
 from pathlib import Path
 
 from PyQt6.QtCore import QTimer
@@ -47,12 +43,7 @@ class MainWindow(QMainWindow):
         return f"{username()}@{hostname()}:{self.shell.cwd}$ "
 
     def _load_vfs(self, path: Path) -> None:
-        """Load ``path`` into ``self.shell.vfs``, reporting the outcome.
-
-        On success prints ``describe(vfs)``; on ``VFSLoadError`` prints the
-        message in red and leaves ``self.shell.vfs`` as the empty VFS it
-        already was.
-        """
+        # on error the shell just keeps the empty vfs
         try:
             vfs = load_vfs(path)
         except VFSLoadError as exc:
@@ -81,17 +72,7 @@ class MainWindow(QMainWindow):
         self.close()
 
     def run_startup_script(self) -> None:
-        """Load and run ``self.config.script_path`` line by line.
-
-        Public (rather than a private slot only reachable through
-        ``QTimer.singleShot``) so tests can invoke it synchronously; the
-        timer set up in ``__init__`` only calls it once the window is shown.
-        On a load error the message is shown in red and the window falls
-        back to ordinary interactive mode. On abort (a step with a non-zero
-        exit code) ``abort_message`` is shown in red; on ``exit`` the window
-        closes with that exit code, exactly like the interactive ``exit``
-        command.
-        """
+        # public so tests can call it directly, normally the QTimer does
         path = self.config.script_path
         if path is None:
             return

@@ -1,18 +1,3 @@
-"""Command implementations and the command registry.
-
-``ls`` and ``cd`` are real now: they resolve paths against ``ctx.vfs``
-(``VFS.resolve``/``normalize``) instead of just echoing their arguments.
-``cat``/``tac`` are new commands that read file content out of the VFS.
-``chmod``/``chown`` change a node's ``mode``/``owner``/``group`` in place
-(in memory only; nothing is ever written back to the VFS's XML source).
-``vfs-info`` is unchanged from the previous stage.
-
-None of this module imports Qt; everything here is plain Python over the
-in-memory VFS model from ``core/vfs.py``.
-"""
-
-from __future__ import annotations
-
 import math
 import re
 import stat
@@ -34,8 +19,6 @@ _OWNER_NAME_RE = re.compile(r"[a-z_][a-z0-9_-]*|[0-9]+")
 
 @dataclass
 class CommandContext:
-    """Everything a command needs beyond its own argument list."""
-
     vfs: VFS
     cwd: str
     last_exit_code: int
@@ -52,16 +35,11 @@ class CommandResult:
 
 
 class Command(ABC):
-    """Base class for all shell commands."""
-
     name: ClassVar[str]
 
     @abstractmethod
     def run(self, args: list[str], ctx: CommandContext) -> CommandResult:
-        """Execute the command against ``args`` and the current ``ctx``.
-
-        Raises ``CommandArgsError`` for invalid arguments.
-        """
+        """raises CommandArgsError on bad args"""
 
 
 def _mode_string(node: VNode) -> str:
@@ -73,13 +51,8 @@ def _display_size(node: VNode) -> int:
     return _DIR_SIZE if isinstance(node, VDir) else node.size  # type: ignore[union-attr]
 
 
+# roughly like GNU ls -h: 4.0K, 1.5M, 12M (always rounds up)
 def _human_size(n: int) -> str:
-    """Format ``n`` bytes the way GNU ``ls -h`` roughly does.
-
-    One digit after the decimal point while the scaled value is below 10,
-    rounded up; a bare integer above that. Plain bytes (< 1024) are printed
-    without a unit suffix.
-    """
     size = float(n)
     unit = 0
     while size >= 1024 and unit < len(_SIZE_UNITS) - 1:
@@ -100,13 +73,8 @@ def _format_listing(
     human: bool,
     show_total: bool,
 ) -> str:
-    """Render ``entries`` (name, node) pairs as one ``ls`` block.
-
-    ``show_total`` requests the ``total N`` header line that precedes a
-    directory's contents in ``-l`` mode (ignored outside ``-l``); ``N`` is
-    simply the number of entries shown, not a real disk-block count.
-    """
     lines: list[str] = []
+    # "total N" is just the entry count, no real blocks here
     if show_total and long_format:
         lines.append(f"total {len(entries)}")
     if not entries:
@@ -134,15 +102,10 @@ def _format_listing(
 
 
 def _dir_entries(vfs: VFS, path: str, cwd: str, node: VDir, show_all: bool) -> list[tuple[str, VNode]]:
-    """List ``node``'s children as (name, node) pairs, sorted by name.
-
-    With ``show_all``, ``.`` and ``..`` are prepended (``..`` is resolved
-    via ``vfs.resolve(path + "/..", cwd)`` rather than a parent pointer,
-    since the VFS tree does not keep one).
-    """
     entries: list[tuple[str, VNode]] = []
     if show_all:
         entries.append((".", node))
+        # no parent pointers in the tree, so go through resolve
         parent = vfs.resolve(f"{path}/..", cwd)
         entries.append(("..", parent))
     for name in sorted(node.children):
@@ -302,13 +265,8 @@ class CatCommand(Command):
         return CommandResult(output=output, error="\n".join(errors), exit_code=exit_code)
 
 
+# same as GNU tac: "a\nb" -> ["a\n", "b"], newline stays glued to its line
 def _tac_records(text: str) -> list[str]:
-    """Split ``text`` into GNU-``tac``-style records (separator ``"\\n"``).
-
-    Every record but a possible final, separator-less one keeps its
-    trailing ``"\\n"`` glued on, exactly like ``tac`` reattaches it after
-    reversing: ``tac_records("a\\nb")`` is ``["a\\n", "b"]``.
-    """
     if text == "":
         return []
     parts = text.split("\n")
@@ -356,12 +314,8 @@ class TacCommand(Command):
         return CommandResult(output=output, error="\n".join(errors), exit_code=exit_code)
 
 
+# node + everything below it, for -R
 def _walk(node: VNode) -> Iterator[VNode]:
-    """Yield ``node`` itself, then (for a directory) every descendant.
-
-    Shared by ``chmod -R``/``chown -R`` to apply their change to a whole
-    subtree instead of just the named node.
-    """
     yield node
     if isinstance(node, VDir):
         for child in node.children.values():
@@ -371,11 +325,7 @@ def _walk(node: VNode) -> Iterator[VNode]:
 def _resolve_targets(
     cmd: str, paths: list[str], ctx: CommandContext, *, recursive: bool
 ) -> tuple[list[VNode], list[str]]:
-    """Resolve ``paths`` against ``ctx``, expanding each via ``_walk`` if
-    ``recursive``. Returns ``(targets, error_messages)``; a path that
-    fails to resolve contributes only to the error list, exactly like
-    ``cat``/``tac``'s per-path error handling.
-    """
+    # bad paths only go to errors, the rest still get changed
     targets: list[VNode] = []
     errors: list[str] = []
     for p in paths:
@@ -406,8 +356,7 @@ class ChmodCommand(Command):
             elif mode_spec is None and is_dash_option and (
                 arg[1] in _CHMOD_MODE_LETTERS or looks_like_symbolic_mode(arg)
             ):
-                # Like GNU: "-x" or even a malformed "-wz" is the MODE operand,
-                # so the latter is reported as an invalid mode, not an option.
+                # GNU treats "-x" (and even junk like "-wz") as MODE, not an option
                 mode_spec = arg
             elif is_dash_option:
                 raise CommandArgsError(f"chmod: invalid option -- '{arg[1]}'")
@@ -434,23 +383,16 @@ class ChmodCommand(Command):
 
 
 class _InvalidOwnerSpec(Exception):
-    """Raised by ``_parse_owner_spec`` for a malformed OWNER[:GROUP] spec."""
+    pass
 
 
 def _valid_owner_name(name: str) -> bool:
     return bool(_OWNER_NAME_RE.fullmatch(name))
 
 
+# OWNER[:GROUP] -> (owner, group), None = don't touch.
+# "user:" keeps the group as is (GNU would switch to the login group, we don't)
 def _parse_owner_spec(spec: str) -> tuple[str | None, str | None]:
-    """Parse ``OWNER[:GROUP]`` into ``(new_owner, new_group)``.
-
-    Either half is ``None`` when that part should be left unchanged:
-    ``"user"``/``"user:"`` leave the group alone (a simplification of
-    GNU's "user's login group" behaviour, documented in the plan/README),
-    ``":group"`` leaves the owner alone. Raises ``_InvalidOwnerSpec`` for
-    an empty spec, a bare ``":"``, or a name that is neither
-    ``^[a-z_][a-z0-9_-]*$`` nor purely numeric (uid/gid stored as text).
-    """
     if ":" not in spec:
         if not _valid_owner_name(spec):
             raise _InvalidOwnerSpec(f"invalid user: '{spec}'")

@@ -7,8 +7,7 @@ def make_vfs() -> VFS:
     docs = VDir(name="docs", mode=0o755, owner="user", group="user", children={"notes.txt": notes})
     user = VDir(name="user", mode=0o755, owner="user", group="user", children={"docs": docs})
     home = VDir(name="home", mode=0o755, owner="root", group="root", children={"user": user})
-    # A root-level dir literally named "2", used to observe $? expansion via
-    # a successful `cd "/$?"` after a command that sets last_exit_code to 2.
+    # dir named "2" so cd "/$?" works after exit code 2
     two = VDir(name="2", mode=0o755, owner="root", group="root", children={})
     root = VDir(name="", mode=0o755, owner="root", group="root", children={"home": home, "2": two})
     return VFS(name="test", sha256="deadbeef", root=root)
@@ -48,9 +47,7 @@ def test_cd_too_many_arguments_from_plan_example() -> None:
 def test_cd_single_quoted_literal_does_not_expand() -> None:
     shell = make_shell()
     result = shell.execute("cd '$HOME'")
-    # Proves single quotes suppressed expansion: cd looked for a literal
-    # "$HOME" entry (which does not exist) rather than following the real
-    # $HOME path.
+    # single quotes: literal "$HOME", no expansion
     assert result.stderr == "cd: $HOME: No such file or directory"
     assert result.exit_code == 1
 

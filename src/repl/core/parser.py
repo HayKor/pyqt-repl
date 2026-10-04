@@ -1,38 +1,3 @@
-"""Command-line tokenizer with POSIX-sh-like quoting and env-var expansion.
-
-Implemented as a small hand-written finite state machine rather than
-``shlex``, because ``shlex`` does not expose which quoting style (if any)
-wrapped a given fragment, and that information is required to decide
-whether ``$VAR`` inside it should be expanded.
-
-Supported subset:
-    - unquoted whitespace separates words;
-    - ``'...'``      literal, no expansion;
-    - ``"..."``      ``$VAR`` / ``${VAR}`` are expanded; ``\\"``, ``\\\\``,
-                      ``\\$`` are recognized escapes;
-    - ``\\x``        outside quotes escapes a single character;
-    - ``$NAME``      NAME matches ``[A-Za-z_][A-Za-z0-9_]*``; ``${NAME}``
-                      is the braced form; an unknown variable expands to
-                      the empty string; a lone ``$`` with no valid name
-                      stays a literal ``$``;
-    - ``$?``         expands via the same lookup (the shell layer supplies
-                      it as the ``"?"`` key of the env mapping);
-    - ``~``          at the very start of an unquoted word expands to
-                      ``$HOME``;
-    - ``#``          outside quotes, at the very start of a word, starts a
-                      comment that runs to the end of the line (``ls -l #
-                      comment``, ``# whole line``); ``#`` inside a word
-                      (``a#b``) or inside quotes (``'#'``, ``"#"``) is a
-                      literal character, and ``\\#`` escapes it;
-    - an unterminated quote, or ``${`` without a matching ``}``, raises
-      ``ParseError``;
-    - a word built entirely from unquoted text that expands to the empty
-      string is dropped, matching sh word-splitting; ``""`` still yields
-      an empty argument.
-"""
-
-from __future__ import annotations
-
 from collections.abc import Mapping
 import os
 
@@ -43,10 +8,7 @@ _NAME_CONT = _NAME_START | frozenset("0123456789")
 
 
 def _expand_var(line: str, dollar_index: int, env: Mapping[str, str]) -> tuple[str, int]:
-    """Expand the variable reference starting at ``line[dollar_index] == '$'``.
-
-    Returns ``(expanded_text, next_index)``.
-    """
+    # -> (value, index right after the var)
     n = len(line)
     j = dollar_index + 1
 
@@ -70,12 +32,11 @@ def _expand_var(line: str, dollar_index: int, env: Mapping[str, str]) -> tuple[s
         name = line[j:k]
         return env.get(name, ""), k
 
-    # No valid name follows: '$' is a literal character.
+    # lone $ stays as is
     return "$", j
 
 
 def tokenize(line: str, env: Mapping[str, str] | None = None) -> list[str]:
-    """Split ``line`` into argv-style words, expanding variables in ``env``."""
     if env is None:
         env = os.environ
 
@@ -90,7 +51,7 @@ def tokenize(line: str, env: Mapping[str, str] | None = None) -> list[str]:
             break
 
         if line[i] == "#":
-            # Unquoted '#' at the start of a word: comment to end of line.
+            # comment, ignore the rest
             break
 
         parts: list[str] = []
