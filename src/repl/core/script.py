@@ -1,3 +1,5 @@
+"""Startup script loading and execution."""
+
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -8,12 +10,15 @@ from .shell import ExecResult, Shell
 
 @dataclass
 class ScriptStep:
+    """One executed script line and its result."""
+
     lineno: int
     line: str
     result: ExecResult
 
 
 def load_script(path: Path) -> list[str]:
+    """Read a UTF-8 script file into lines; raises ScriptError."""
     try:
         text = path.read_text(encoding="utf-8")
     except FileNotFoundError:
@@ -28,12 +33,16 @@ def load_script(path: Path) -> list[str]:
 
 
 def is_blank_or_comment(line: str) -> bool:
+    """Check if a line is skipped (blank or ``#`` comment)."""
     stripped = line.strip()
     return stripped == "" or stripped.startswith("#")
 
 
 def iter_script(shell: Shell, lines: list[str]) -> Iterator[ScriptStep]:
-    # skips blanks/comments, stops after the first error or exit
+    """Execute script lines one by one, yielding a step for each.
+
+    Skips blanks and comments, stops after the first error or ``exit``.
+    """
     for lineno, line in enumerate(lines, start=1):
         if is_blank_or_comment(line):
             continue
@@ -45,4 +54,6 @@ def iter_script(shell: Shell, lines: list[str]) -> Iterator[ScriptStep]:
 
 
 def abort_message(path: Path, step: ScriptStep) -> str:
-    return f"repl: {path}: line {step.lineno}: aborted (exit code {step.result.exit_code})"
+    """Message shown when a script stops on a failing line."""
+    code = step.result.exit_code
+    return f"repl: {path}: line {step.lineno}: aborted (exit code {code})"

@@ -1,19 +1,32 @@
+"""Tests for startup script loading and execution."""
+
 import os
 from pathlib import Path
 
 import pytest
 
-from repl.core.errors import ScriptError
-from repl.core.script import abort_message, is_blank_or_comment, iter_script, load_script
+from repl.core.errors import EXIT_NOT_FOUND, ScriptError
+from repl.core.script import (
+    abort_message,
+    is_blank_or_comment,
+    iter_script,
+    load_script,
+)
 from repl.core.shell import Shell
 from repl.core.vfs import VDir, VFS
+
+CUSTOM_EXIT = 3
 
 
 def make_vfs() -> VFS:
     tmp = VDir(name="tmp", mode=0o755, owner="root", group="root", children={})
     zero = VDir(name="0", mode=0o755, owner="root", group="root", children={})
     root = VDir(
-        name="", mode=0o755, owner="root", group="root", children={"tmp": tmp, "0": zero}
+        name="",
+        mode=0o755,
+        owner="root",
+        group="root",
+        children={"tmp": tmp, "0": zero},
     )
     return VFS(name="test", sha256="deadbeef", root=root)
 
@@ -47,26 +60,26 @@ def test_iter_script_stops_on_first_error() -> None:
     shell = make_shell()
     lines = ["ls -l $HOME", "foo bar", "ls -l /never/reached"]
     steps = list(iter_script(shell, lines))
-    assert len(steps) == 2
+    assert [step.lineno for step in steps] == [1, 2]
     assert steps[-1].line == "foo bar"
-    assert steps[-1].result.exit_code == 127
+    assert steps[-1].result.exit_code == EXIT_NOT_FOUND
     assert steps[-1].result.should_exit is False
 
 
 def test_iter_script_stops_on_exit() -> None:
     shell = make_shell()
-    lines = ["ls -l $HOME", "exit 3", "ls -l /never/reached"]
+    lines = ["ls -l $HOME", f"exit {CUSTOM_EXIT}", "ls -l /never/reached"]
     steps = list(iter_script(shell, lines))
-    assert len(steps) == 2
+    assert [step.lineno for step in steps] == [1, 2]
     assert steps[-1].result.should_exit is True
-    assert steps[-1].result.exit_code == 3
+    assert steps[-1].result.exit_code == CUSTOM_EXIT
 
 
 def test_status_variable_carries_between_script_lines() -> None:
     shell = make_shell()
     lines = ["ls -l $HOME", 'cd "/$?"']
     steps = list(iter_script(shell, lines))
-    assert len(steps) == 2
+    assert [step.lineno for step in steps] == [1, 2]
     # $? -> "0" so cd "/$?" landed in /0
     assert steps[1].result.exit_code == 0
     assert shell.cwd == "/0"
@@ -77,7 +90,10 @@ def test_abort_message_format() -> None:
     lines = ["ls -l $HOME", "foo bar"]
     steps = list(iter_script(shell, lines))
     message = abort_message(Path("scripts/startup/with_error.repl"), steps[-1])
-    assert message == "repl: scripts/startup/with_error.repl: line 2: aborted (exit code 127)"
+    assert (
+        message == "repl: scripts/startup/with_error.repl: line 2: "
+        "aborted (exit code 127)"
+    )
 
 
 def test_load_script_missing_file(tmp_path: Path) -> None:

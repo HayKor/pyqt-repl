@@ -1,3 +1,5 @@
+"""Main window of the emulator."""
+
 from pathlib import Path
 
 from PyQt6.QtCore import QTimer
@@ -13,12 +15,15 @@ from .terminal import TerminalWidget
 
 
 class MainWindow(QMainWindow):
+    """Main window: terminal widget wired to a Shell."""
+
     def __init__(
         self,
         shell: Shell | None = None,
         config: AppConfig | None = None,
         parent: QWidget | None = None,
     ) -> None:
+        """Set up the terminal, print debug lines, load VFS, queue script."""
         super().__init__(parent)
         self.shell = shell if shell is not None else Shell()
         self.config = config if config is not None else AppConfig()
@@ -72,7 +77,10 @@ class MainWindow(QMainWindow):
         self.close()
 
     def run_startup_script(self) -> None:
-        # public so tests can call it directly, normally the QTimer does
+        """Run ``--script`` line by line, echoing each like typed input.
+
+        Public so tests can call it directly; normally a QTimer does.
+        """
         path = self.config.script_path
         if path is None:
             return
