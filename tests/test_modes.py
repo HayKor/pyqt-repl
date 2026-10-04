@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import pytest
 
 from repl.core.modes import ModeError, looks_like_symbolic_mode, parse_mode

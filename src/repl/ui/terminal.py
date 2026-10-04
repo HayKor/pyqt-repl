@@ -1,7 +1,3 @@
-"""The terminal-like widget: output pane + prompt + input line."""
-
-from __future__ import annotations
-
 import html
 
 from PyQt6.QtCore import Qt, pyqtSignal

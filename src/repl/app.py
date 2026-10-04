@@ -1,7 +1,3 @@
-"""QApplication bootstrap: the only module allowed to build a QApplication."""
-
-from __future__ import annotations
-
 import sys
 
 from PyQt6.QtWidgets import QApplication

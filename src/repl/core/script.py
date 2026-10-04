@@ -1,12 +1,3 @@
-"""Startup-script execution: run a file line by line through a ``Shell``.
-
-Contains no Qt imports; the GUI layer is only responsible for echoing each
-``ScriptStep`` and displaying its result the same way it does for
-interactively typed commands.
-"""
-
-from __future__ import annotations
-
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path

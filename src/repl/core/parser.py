@@ -1,38 +1,3 @@
-"""Command-line tokenizer with POSIX-sh-like quoting and env-var expansion.
-
-Implemented as a small hand-written finite state machine rather than
-``shlex``, because ``shlex`` does not expose which quoting style (if any)
-wrapped a given fragment, and that information is required to decide
-whether ``$VAR`` inside it should be expanded.
-
-Supported subset:
-    - unquoted whitespace separates words;
-    - ``'...'``      literal, no expansion;
-    - ``"..."``      ``$VAR`` / ``${VAR}`` are expanded; ``\\"``, ``\\\\``,
-                      ``\\$`` are recognized escapes;
-    - ``\\x``        outside quotes escapes a single character;
-    - ``$NAME``      NAME matches ``[A-Za-z_][A-Za-z0-9_]*``; ``${NAME}``
-                      is the braced form; an unknown variable expands to
-                      the empty string; a lone ``$`` with no valid name
-                      stays a literal ``$``;
-    - ``$?``         expands via the same lookup (the shell layer supplies
-                      it as the ``"?"`` key of the env mapping);
-    - ``~``          at the very start of an unquoted word expands to
-                      ``$HOME``;
-    - ``#``          outside quotes, at the very start of a word, starts a
-                      comment that runs to the end of the line (``ls -l #
-                      comment``, ``# whole line``); ``#`` inside a word
-                      (``a#b``) or inside quotes (``'#'``, ``"#"``) is a
-                      literal character, and ``\\#`` escapes it;
-    - an unterminated quote, or ``${`` without a matching ``}``, raises
-      ``ParseError``;
-    - a word built entirely from unquoted text that expands to the empty
-      string is dropped, matching sh word-splitting; ``""`` still yields
-      an empty argument.
-"""
-
-from __future__ import annotations
-
 from collections.abc import Mapping
 import os
 

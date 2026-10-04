@@ -1,13 +1,3 @@
-"""Command-line configuration: parsing and its debug representation.
-
-This module only accepts and reports the VFS and startup-script paths;
-loading the VFS image itself is the caller's job (``ui/main_window.py``),
-so ``core/vfs_loader.py`` stays independently testable. Contains no Qt
-imports so ``parse_args`` can run before ``QApplication`` is created.
-"""
-
-from __future__ import annotations
-
 import argparse
 from collections.abc import Sequence
 from dataclasses import dataclass

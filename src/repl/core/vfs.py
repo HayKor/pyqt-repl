@@ -1,14 +1,3 @@
-"""In-memory virtual file system: node types and path resolution.
-
-Everything here lives in memory only; nothing in this module ever touches
-the real file system for VFS data. Path handling is implemented from
-scratch (splitting on ``/``, handling ``.``/``..``) rather than with
-``os.path``/``pathlib``, since those operate on the real OS/file system and
-its separator conventions, not the VFS's.
-"""
-
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from pathlib import Path
 

@@ -1,18 +1,3 @@
-"""Command implementations and the command registry.
-
-``ls`` and ``cd`` are real now: they resolve paths against ``ctx.vfs``
-(``VFS.resolve``/``normalize``) instead of just echoing their arguments.
-``cat``/``tac`` are new commands that read file content out of the VFS.
-``chmod``/``chown`` change a node's ``mode``/``owner``/``group`` in place
-(in memory only; nothing is ever written back to the VFS's XML source).
-``vfs-info`` is unchanged from the previous stage.
-
-None of this module imports Qt; everything here is plain Python over the
-in-memory VFS model from ``core/vfs.py``.
-"""
-
-from __future__ import annotations
-
 import math
 import re
 import stat

@@ -1,12 +1,3 @@
-"""Exception hierarchy used by the shell core.
-
-Every exception's ``str()`` is already the ready-to-print, bash-styled
-error message.
-"""
-
-from __future__ import annotations
-
-
 class ShellError(Exception):
     """Base class for all errors the shell core can raise."""
 

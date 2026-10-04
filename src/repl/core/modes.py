@@ -1,24 +1,3 @@
-"""``chmod``-style MODE parsing: octal and symbolic forms.
-
-Kept separate from ``commands.py`` because the grammar is self-contained
-and independently testable: ``parse_mode`` turns a MODE spec plus the
-node's current permission bits into new permission bits (0..0o777),
-raising ``ModeError`` for anything that does not parse.
-
-Supported forms (see ``docs/plans/005_stage5_chmod_chown.md``):
-    - octal: ``^0?[0-7]{3}$`` (``755``, ``0644``) replaces the bits
-      wholesale; special bits (setuid/setgid/sticky, a fourth digit) are
-      not supported;
-    - symbolic: a comma-separated list of clauses, each
-      ``[ugoa]*([-+=][rwx]*)+`` (``u+x``, ``go-w``, ``a=r``, ``+x``,
-      ``u=rwx,g=rx,o=``, ``u+x-w``); an empty "who" means ``a``; umask is
-      not applied (there is no umask in this emulator); ``=`` with an
-      empty permission list clears that role's bits. ``X``/``s``/``t`` and
-      copying another role's bits (``u=g``) are not supported.
-"""
-
-from __future__ import annotations
-
 import re
 
 _OCTAL_RE = re.compile(r"0?[0-7]{3}")

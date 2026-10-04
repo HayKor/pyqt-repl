@@ -1,7 +1,3 @@
-"""OS-derived identity used for the prompt and the window title."""
-
-from __future__ import annotations
-
 import getpass
 import os
 import socket

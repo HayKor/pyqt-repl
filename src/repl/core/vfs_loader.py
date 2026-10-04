@@ -1,11 +1,3 @@
-"""Loading a VFS image from an XML file, once, entirely into memory.
-
-The XML is read as ``bytes`` a single time (used both for SHA-256 and for
-parsing); nothing derived from it is ever written back to disk.
-"""
-
-from __future__ import annotations
-
 import base64
 import binascii
 import hashlib
