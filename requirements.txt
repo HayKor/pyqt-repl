@@ -1,0 +1,10 @@
+iniconfig==2.3.0
+packaging==26.3
+pluggy==1.6.0
+pygments==2.21.0
+pyqt6==6.11.0
+pyqt6-qt6==6.11.2
+pyqt6-sip==13.12.0
+pytest==9.1.1
+-e file:///home/arthur/Projects/conf-uprav-1
+ruff==0.16.10
