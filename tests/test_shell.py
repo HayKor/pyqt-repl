@@ -8,6 +8,7 @@ CUSTOM_EXIT = 7
 
 
 def make_vfs() -> VFS:
+    """Build a small tree with a ``/2`` dir for ``cd "/$?"`` tests."""
     notes = VFile(
         name="notes.txt", mode=0o644, owner="user", group="user", data=b"hi\n"
     )
@@ -32,7 +33,6 @@ def make_vfs() -> VFS:
         group="root",
         children={"user": user},
     )
-    # dir named "2" so cd "/$?" works after exit code 2
     two = VDir(name="2", mode=0o755, owner="root", group="root", children={})
     root = VDir(
         name="",
@@ -76,9 +76,9 @@ def test_cd_too_many_arguments_from_plan_example() -> None:
 
 
 def test_cd_single_quoted_literal_does_not_expand() -> None:
+    """Single quotes keep ``$HOME`` literal, no expansion."""
     shell = make_shell()
     result = shell.execute("cd '$HOME'")
-    # single quotes: literal "$HOME", no expansion
     assert result.stderr == "cd: $HOME: No such file or directory"
     assert result.exit_code == 1
 
@@ -115,8 +115,9 @@ def test_exit_non_numeric() -> None:
 
 
 def test_exit_bare_uses_last_exit_code() -> None:
+    """``ls -z`` sets the last exit code to 2, bare exit reuses it."""
     shell = make_shell()
-    shell.execute("ls -z")  # sets last_exit_code to 2
+    shell.execute("ls -z")
     result = shell.execute("exit")
     assert result.should_exit is True
     assert result.exit_code == EXIT_USAGE
@@ -130,8 +131,9 @@ def test_exit_with_explicit_code() -> None:
 
 
 def test_status_variable_expansion() -> None:
+    """After ``ls -z`` fails with 2, ``cd "/$?"`` goes to ``/2``."""
     shell = make_shell()
-    shell.execute("ls -z")  # last_exit_code becomes 2
+    shell.execute("ls -z")
     result = shell.execute('cd "/$?"')
     assert result.exit_code == 0
     assert shell.cwd == "/2"

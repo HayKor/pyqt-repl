@@ -6,7 +6,6 @@ _OCTAL_RE = re.compile(r"0?[0-7]{3}")
 _CLAUSE_RE = re.compile(r"([ugoa]*)((?:[+\-=][rwx]*)+)")
 _OP_RE = re.compile(r"[+\-=][rwx]*")
 
-# "=" clears these first
 _ROLE_MASK = {"u": 0o700, "g": 0o070, "o": 0o007}
 
 _ROLE_PERM_BIT = {
@@ -34,7 +33,10 @@ def parse_mode(spec: str, current_mode: int) -> int:
 
 
 def _apply_op(mode: int, op: str, role: str, perms: str) -> int:
-    """Apply one ``+``/``-``/``=`` with ``perms`` (``rwx``) to one role."""
+    """Apply one ``+``/``-``/``=`` with ``perms`` (``rwx``) to one role.
+
+    ``=`` first clears the role's bits (``_ROLE_MASK``).
+    """
     bits = 0
     for perm in perms:
         bits |= _ROLE_PERM_BIT[role][perm]

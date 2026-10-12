@@ -89,7 +89,8 @@ class VFS:
     def resolve(self, path: str, cwd: str = "/") -> VNode:
         """Find the node for ``path``; raises VFSPathError.
 
-        Errors show the path as typed, like bash.
+        Errors show the path as typed, like bash. A trailing slash after
+        a file (``file/``) is an error too.
         """
         normalized = self.normalize(path, cwd)
         trailing_slash = (
@@ -108,7 +109,6 @@ class VFS:
                     raise VFSPathError(path, "No such file or directory")
                 node = child
 
-        # "file/" is an error too
         if trailing_slash and isinstance(node, VFile):
             raise VFSPathError(path, "Not a directory")
         return node

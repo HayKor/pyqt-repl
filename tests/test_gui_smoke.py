@@ -3,11 +3,14 @@
 from pathlib import Path
 
 import pytest
+from PyQt6.QtCore import Qt
+from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QApplication
 
 from repl.core.config import AppConfig
 from repl.core.sysinfo import hostname, username, window_title
 from repl.ui.main_window import MainWindow
+from repl.ui.terminal import HistoryLineEdit
 
 CUSTOM_EXIT = 3
 
@@ -118,9 +121,7 @@ def test_startup_script_error_aborts_and_skips_later_commands(
     assert "repl: foo: command not found" in text
     assert f"repl: {script}: line 2: aborted (exit code 127)" in text
     assert "/never/reached" not in text
-    assert (
-        window.isVisible() is True
-    )  # falls back to interactive mode, window stays open
+    assert window.isVisible() is True
 
 
 def test_startup_script_missing_file_reports_error(
@@ -207,3 +208,20 @@ def test_chmod_then_ls_l_shows_the_new_mode(qapp: QApplication) -> None:
     window.terminal.submit("ls -l /home/user/docs/notes.txt")
     text = window.terminal.output_text()
     assert "-rwx------ user user  " in text
+
+
+def test_input_history_browses_with_up_and_down(qapp: QApplication) -> None:
+    line_edit = HistoryLineEdit()
+    line_edit.add_to_history("first")
+    line_edit.add_to_history("second")
+
+    QTest.keyClick(line_edit, Qt.Key.Key_Up)
+    assert line_edit.text() == "second"
+    QTest.keyClick(line_edit, Qt.Key.Key_Up)
+    assert line_edit.text() == "first"
+    QTest.keyClick(line_edit, Qt.Key.Key_Up)
+    assert line_edit.text() == "first"
+    QTest.keyClick(line_edit, Qt.Key.Key_Down)
+    assert line_edit.text() == "second"
+    QTest.keyClick(line_edit, Qt.Key.Key_Down)
+    assert line_edit.text() == ""

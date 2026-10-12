@@ -4,10 +4,13 @@ import sys
 
 
 def main() -> None:
-    """Parse CLI arguments, then start the GUI and exit with its code."""
+    """Parse CLI arguments, then start the GUI and exit with its code.
+
+    Arguments are parsed before Qt is imported, so a bad flag just
+    prints usage and exits.
+    """
     from .core.config import parse_args
 
-    # before Qt, so a bad flag just prints usage and exits
     cfg = parse_args(sys.argv[1:])
 
     from .app import run

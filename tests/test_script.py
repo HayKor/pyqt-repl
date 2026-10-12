@@ -76,11 +76,11 @@ def test_iter_script_stops_on_exit() -> None:
 
 
 def test_status_variable_carries_between_script_lines() -> None:
+    """``$?`` expands to "0", so ``cd "/$?"`` lands in ``/0``."""
     shell = make_shell()
     lines = ["ls -l $HOME", 'cd "/$?"']
     steps = list(iter_script(shell, lines))
     assert [step.lineno for step in steps] == [1, 2]
-    # $? -> "0" so cd "/$?" landed in /0
     assert steps[1].result.exit_code == 0
     assert shell.cwd == "/0"
 

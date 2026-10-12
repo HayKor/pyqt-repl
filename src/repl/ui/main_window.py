@@ -48,7 +48,7 @@ class MainWindow(QMainWindow):
         return f"{username()}@{hostname()}:{self.shell.cwd}$ "
 
     def _load_vfs(self, path: Path) -> None:
-        # on error the shell just keeps the empty vfs
+        """Load the VFS into the shell; on error keep the empty one."""
         try:
             vfs = load_vfs(path)
         except VFSLoadError as exc:

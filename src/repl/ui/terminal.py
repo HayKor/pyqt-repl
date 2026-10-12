@@ -3,8 +3,8 @@
 import html
 from typing import override
 
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QFontDatabase
+from PyQt6.QtCore import QEvent, Qt, pyqtSignal
+from PyQt6.QtGui import QFontDatabase, QKeyEvent
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -21,13 +21,26 @@ _OUTPUT_STYLE = (
 _ERROR_COLOR = "#ff6b68"
 
 
-class _HistoryLineEdit(QLineEdit):
+class HistoryLineEdit(QLineEdit):
     """Input line with Up/Down history."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
+        """Start with an empty history."""
         super().__init__(parent)
         self._history: list[str] = []
         self._index = 0
+
+    @override
+    def event(self, e: QEvent | None) -> bool:
+        """Browse history with Up/Down, pass other events on."""
+        if isinstance(e, QKeyEvent) and e.type() == QEvent.Type.KeyPress:
+            if e.key() == Qt.Key.Key_Up:
+                self.history_prev()
+                return True
+            if e.key() == Qt.Key.Key_Down:
+                self.history_next()
+                return True
+        return super().event(e)
 
     def add_to_history(self, text: str) -> None:
         """Remember a non-empty line and reset the history cursor."""
@@ -35,23 +48,20 @@ class _HistoryLineEdit(QLineEdit):
             self._history.append(text)
         self._index = len(self._history)
 
-    @override
-    def keyPressEvent(self, event) -> None:
-        """Browse history with Up/Down, pass other keys on."""
-        if event.key() == Qt.Key.Key_Up:
-            if self._history and self._index > 0:
-                self._index -= 1
-                self.setText(self._history[self._index])
-            return
-        if event.key() == Qt.Key.Key_Down:
-            if self._index < len(self._history) - 1:
-                self._index += 1
-                self.setText(self._history[self._index])
-            else:
-                self._index = len(self._history)
-                self.clear()
-            return
-        super().keyPressEvent(event)
+    def history_prev(self) -> None:
+        """Show the previous history line (Up)."""
+        if self._history and self._index > 0:
+            self._index -= 1
+            self.setText(self._history[self._index])
+
+    def history_next(self) -> None:
+        """Show the next history line, or clear past the end (Down)."""
+        if self._index < len(self._history) - 1:
+            self._index += 1
+            self.setText(self._history[self._index])
+        else:
+            self._index = len(self._history)
+            self.clear()
 
 
 class TerminalWidget(QWidget):
@@ -74,7 +84,7 @@ class TerminalWidget(QWidget):
         self._prompt_label = QLabel(prompt, self)
         self._prompt_label.setFont(mono_font)
 
-        self._input = _HistoryLineEdit(self)
+        self._input = HistoryLineEdit(self)
         self._input.setFont(mono_font)
         self._input.returnPressed.connect(self._on_return_pressed)
 

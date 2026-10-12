@@ -101,9 +101,6 @@ def make_ctx(
     )
 
 
-# ls
-
-
 def test_ls_no_args_lists_cwd() -> None:
     result = LsCommand().run([], make_ctx(cwd="/home/user/docs"))
     assert result.output == "empty.txt  notes.txt"
@@ -214,9 +211,6 @@ def test_ls_rejects_unknown_option_within_combo() -> None:
         LsCommand().run(["-lx"], make_ctx())
 
 
-# cd
-
-
 def test_cd_no_args_goes_to_root() -> None:
     ctx = make_ctx(cwd="/home/user/docs")
     result = CdCommand().run([], ctx)
@@ -275,9 +269,6 @@ def test_cd_too_many_arguments() -> None:
         CdCommand().run(["/tmp", "/home"], make_ctx())
 
 
-# exit
-
-
 def test_exit_no_args_defaults_to_last_exit_code() -> None:
     result = ExitCommand().run([], make_ctx(last_exit_code=CUSTOM_EXIT))
     assert result.should_exit is True
@@ -306,9 +297,6 @@ def test_exit_non_numeric_argument() -> None:
 def test_exit_too_many_arguments() -> None:
     with pytest.raises(CommandArgsError, match="exit: too many arguments"):
         ExitCommand().run(["1", "2"], make_ctx())
-
-
-# cat
 
 
 def test_cat_concatenates_files_in_argument_order() -> None:
@@ -355,16 +343,13 @@ def test_cat_invalid_option() -> None:
         CatCommand().run(["-x", "/var/logs/one.log"], make_ctx())
 
 
-# tac
-
-
 def test_tac_reverses_lines_within_a_file() -> None:
     result = TacCommand().run(["/var/logs/one.log"], make_ctx())
     assert result.output == "2\n1"
 
 
 def test_tac_glues_last_unterminated_line_gnu_style() -> None:
-    # GNU gives "ba\n" here, we just drop the trailing \n as usual
+    """GNU keeps a trailing newline after "ba", we drop it as usual."""
     result = TacCommand().run(["/var/logs/ab.txt"], make_ctx())
     assert result.output == "ba"
 
@@ -398,9 +383,6 @@ def test_tac_missing_file_operand() -> None:
 def test_tac_invalid_option() -> None:
     with pytest.raises(CommandArgsError, match=r"tac: invalid option -- 'x'"):
         TacCommand().run(["-x", "/var/logs/one.log"], make_ctx())
-
-
-# chmod
 
 
 def test_chmod_octal_sets_absolute_mode() -> None:
@@ -495,9 +477,6 @@ def test_chmod_malformed_dash_mode_is_invalid_mode_not_option() -> None:
     )
     assert result.error == "chmod: invalid mode: '-wz'"
     assert result.exit_code == 1
-
-
-# chown
 
 
 def test_chown_user_only_changes_owner_leaves_group() -> None:
@@ -607,10 +586,8 @@ def test_chown_rejects_unknown_option() -> None:
         )
 
 
-# chmod/chown don't write anything back to the xml
-
-
 def test_chmod_and_chown_do_not_modify_the_vfs_source_file() -> None:
+    """chmod/chown never write back to the XML; the VFS hash stays."""
     path = Path(__file__).resolve().parent.parent / "vfs" / "deep.xml"
     before = hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -622,11 +599,7 @@ def test_chmod_and_chown_do_not_modify_the_vfs_source_file() -> None:
 
     after = hashlib.sha256(path.read_bytes()).hexdigest()
     assert after == before
-    # hash is still the original file's
     assert shell.vfs.sha256 == before
-
-
-# vfs-info
 
 
 def test_vfs_info_not_loaded() -> None:

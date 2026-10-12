@@ -123,10 +123,13 @@ def _format_listing(
 def _dir_entries(
     vfs: VFS, path: str, cwd: str, node: VDir, show_all: bool
 ) -> list[tuple[str, VNode]]:
+    """List ``node`` for ls, with ``.`` and ``..`` when ``show_all``.
+
+    The tree has no parent pointers, so ``..`` is found via resolve.
+    """
     entries: list[tuple[str, VNode]] = []
     if show_all:
         entries.append((".", node))
-        # no parent pointers in the tree, so go through resolve
         parent = vfs.resolve(f"{path}/..", cwd)
         entries.append(("..", parent))
     for name in sorted(node.children):
@@ -137,15 +140,17 @@ def _dir_entries(
 
 
 @dataclass
-class _LsOptions:
+class LsOptions:
+    """Flags parsed from ls arguments."""
+
     show_all: bool = False
     long_format: bool = False
     human: bool = False
 
 
-def _parse_ls_args(args: list[str]) -> tuple[_LsOptions, list[str]]:
+def _parse_ls_args(args: list[str]) -> tuple[LsOptions, list[str]]:
     """Split ``ls`` arguments into options and paths."""
-    opts = _LsOptions()
+    opts = LsOptions()
     paths: list[str] = []
     for arg in args:
         if not (arg.startswith("-") and len(arg) > 1):
@@ -468,7 +473,7 @@ class ChmodCommand(Command):
         )
 
 
-class _InvalidOwnerSpecError(Exception):
+class InvalidOwnerSpecError(Exception):
     """Bad OWNER[:GROUP]; the message is the text after ``chown: ``."""
 
 
@@ -484,22 +489,22 @@ def _parse_owner_spec(spec: str) -> tuple[str | None, str | None]:
     """
     if ":" not in spec:
         if not _valid_owner_name(spec):
-            raise _InvalidOwnerSpecError(f"invalid user: '{spec}'")
+            raise InvalidOwnerSpecError(f"invalid user: '{spec}'")
         return spec, None
 
     owner_part, group_part = spec.split(":", 1)
     if owner_part == "" and group_part == "":
-        raise _InvalidOwnerSpecError(f"invalid user: '{spec}'")
+        raise InvalidOwnerSpecError(f"invalid user: '{spec}'")
 
     new_owner = None
     new_group = None
     if owner_part != "":
         if not _valid_owner_name(owner_part):
-            raise _InvalidOwnerSpecError(f"invalid user: '{owner_part}'")
+            raise InvalidOwnerSpecError(f"invalid user: '{owner_part}'")
         new_owner = owner_part
     if group_part != "":
         if not _valid_owner_name(group_part):
-            raise _InvalidOwnerSpecError(f"invalid group: '{group_part}'")
+            raise InvalidOwnerSpecError(f"invalid group: '{group_part}'")
         new_group = group_part
     return new_owner, new_group
 
@@ -532,7 +537,7 @@ class ChownCommand(Command):
         recursive, owner_spec, paths = _parse_chown_args(args)
         try:
             new_owner, new_group = _parse_owner_spec(owner_spec)
-        except _InvalidOwnerSpecError as exc:
+        except InvalidOwnerSpecError as exc:
             return CommandResult(error=f"chown: {exc}", exit_code=EXIT_FAILURE)
 
         targets, errors = _resolve_targets(
