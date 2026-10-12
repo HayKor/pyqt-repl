@@ -5,8 +5,6 @@ import pytest
 
 from repl.core.modes import ModeError, looks_like_symbolic_mode, parse_mode
 
-# octal
-
 
 def perms(mode: int) -> str:
     """Render permission bits like ``ls -l`` does: ``rwxr-xr-x``."""
@@ -40,9 +38,6 @@ def test_octal_rejects_bad_digit() -> None:
         parse_mode("789", 0o644)
 
 
-# symbolic: single clause
-
-
 def test_symbolic_add_bit_for_owner() -> None:
     assert perms(parse_mode("u+x", 0o644)) == "rwxr--r--"
 
@@ -64,11 +59,8 @@ def test_symbolic_assign_empty_perms_clears_role() -> None:
 
 
 def test_symbolic_assign_only_touches_named_role() -> None:
-    # group/other stay as they were
+    """Group and other bits stay as they were."""
     assert perms(parse_mode("u=rwx", 0o022)) == "rwx-w--w-"
-
-
-# symbolic: comma lists and multi-op clauses
 
 
 def test_symbolic_comma_list() -> None:
@@ -81,9 +73,6 @@ def test_symbolic_multiple_ops_in_one_clause_apply_in_order() -> None:
 
 def test_symbolic_minus_x_removes_execute_for_everyone() -> None:
     assert perms(parse_mode("-x", 0o755)) == "rw-r--r--"
-
-
-# symbolic: rejected forms
 
 
 def test_symbolic_rejects_capital_x() -> None:
@@ -119,9 +108,6 @@ def test_rejects_garbage() -> None:
 def test_rejects_trailing_comma() -> None:
     with pytest.raises(ModeError):
         parse_mode("u+x,", 0o644)
-
-
-# looks_like_symbolic_mode
 
 
 def test_looks_like_symbolic_mode_true_for_dash_x() -> None:

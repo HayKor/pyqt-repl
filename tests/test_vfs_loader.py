@@ -37,8 +37,8 @@ def test_load_multi_structure() -> None:
 
     readme = vfs.root.children["readme.txt"]
     assert isinstance(readme, VFile)
-    assert perms(readme.mode) == "rw-r--r--"  # default file mode
-    assert readme.owner == "root"  # default owner
+    assert perms(readme.mode) == "rw-r--r--"
+    assert readme.owner == "root"
     assert (
         readme.data == b"Welcome to the multi VFS.\n"
         b"It has a few plain files in the root directory.\n"
@@ -57,10 +57,8 @@ def test_load_deep_structure_and_defaults() -> None:
 
     home = vfs.root.children["home"]
     assert isinstance(home, VDir)
-    assert perms(home.mode) == "rwxr-xr-x"  # default dir mode
-    assert (
-        home.owner == "root"
-    )  # default owner (not inherited from root <vfs owner="root">)
+    assert perms(home.mode) == "rwxr-xr-x"
+    assert home.owner == "root"
 
     user = home.children["user"]
     assert isinstance(user, VDir)

@@ -11,10 +11,11 @@ from .ui.main_window import MainWindow
 def run(config: AppConfig | None = None) -> int:
     """Print the debug config lines, open the main window, run the event loop.
 
-    Returns the application exit code.
+    The config is flushed right away, otherwise it sits in the buffer
+    while the event loop runs (stdout is not a tty). Returns the
+    application exit code.
     """
     cfg = config if config is not None else AppConfig()
-    # flush or it sits in the buffer while the event loop runs (not a tty)
     print(*format_config(cfg), sep="\n", flush=True)
 
     app = QApplication([sys.argv[0]])
